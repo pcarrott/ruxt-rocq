@@ -1,5 +1,5 @@
 From stdpp Require Export binders.
-From RUXt Require Import gmap.
+From RUXt Require Export gmap.
 
 
 (* Heap locations *)
@@ -35,9 +35,10 @@ Inductive expr :=
 
 (*** Context and termination ***)
 
-(* Functions *)
-Definition fun_impl : Set := list string * expr.
-Definition fun_ctx : Set := gmap string fun_impl.
+(* Function implementations *)
+Inductive fun_impl := FunImpl (xs : list string) (e : expr).
+Notation "{ ( xs ) e }" := (FunImpl xs e).
+Definition impl_ctx : Set := gmap string fun_impl.
 (* Heaps *)
 Inductive heap_val := LangVal (v : val) | Poison | Freed.
 Definition heap : Set := gmap loc heap_val.
@@ -116,81 +117,82 @@ Definition subst_l (xs : list string) (vs : list val) (e : expr) : option expr :
 (*** Operational semantics ***)
 
 (* Inference rules *)
-Reserved Notation "γ ⊢ << h1 | e >> ⇓ << h2 | ε >>" (at level 100, no associativity).
-Inductive eval_expr : fun_ctx → heap → expr → heap → exit → Prop :=
+Reserved Notation "γ ⊢ ⟨ h1 | e ⟩ ⇓ ⟨ h2 | ε ⟩"
+  (at level 100, no associativity).
+Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Pure : forall γ p h, 
-  γ ⊢ << h | Pure p >> ⇓ << h | eval_pure p >>
+  γ ⊢ ⟨ h | Pure p ⟩ ⇓ ⟨ h | eval_pure p ⟩
 | O_Error : ∀ γ h, 
-  γ ⊢ << h | Error >> ⇓ << h | Err BotE >>
+  γ ⊢ ⟨ h | Error ⟩ ⇓ ⟨ h | Err BotE ⟩
 | O_Assume : ∀ γ p h,
   eval_pure p = Ok (VBool true) →
-  γ ⊢ << h | Assume p >> ⇓ << h | Ok VUnit >>
+  γ ⊢ ⟨ h | Assume p ⟩ ⇓ ⟨ h | Ok VUnit ⟩
 | O_Let : ∀ γ x e1 e2 h h' h'' v ε,
-  γ ⊢ << h | e1 >> ⇓ << h'' | Ok v >> → γ ⊢ << h'' | subst x v e2 >> ⇓ << h' | ε >> →
-  γ ⊢ << h | Let x e1 e2 >> ⇓ << h' | ε >>
+  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | subst x v e2 ⟩ ⇓ ⟨ h' | ε ⟩ →
+  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
 | O_LetCut : ∀ γ x e1 e2 h h' ε,
-  γ ⊢ << h | e1 >> ⇓ << h' | ε >> → ((∃ ξ, ε = Err ξ) ∨ (∃ m, ε = Miss m)) →
-  γ ⊢ << h | Let x e1 e2 >> ⇓ << h' | ε >>
+  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | ε ⟩ → ((∃ ξ, ε = Err ξ) ∨ (∃ m, ε = Miss m)) →
+  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
 | O_Choice1 : ∀ γ e1 e2 h h' ε,
-  γ ⊢ << h | e1 >> ⇓ << h' | ε >> →
-  γ ⊢ << h | Choice e1 e2 >> ⇓ << h' | ε >>
+  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | ε ⟩ →
+  γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
 | O_Choice2 : ∀ γ e1 e2 h h' ε,
-  γ ⊢ << h | e2 >> ⇓ << h' | ε >> →
-  γ ⊢ << h | Choice e1 e2 >> ⇓ << h' | ε >>
+  γ ⊢ ⟨ h | e2 ⟩ ⇓ ⟨ h' | ε ⟩ →
+  γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
 | O_Loop : ∀ γ e h h' ε,
-  γ ⊢ << h | Let BAnon e (Loop e) >> ⇓ << h' | ε >> →
-  γ ⊢ << h | Loop e >> ⇓ << h' | ε >>
+  γ ⊢ ⟨ h | Let BAnon e (Loop e) ⟩ ⇓ ⟨ h' | ε ⟩ →
+  γ ⊢ ⟨ h | Loop e ⟩ ⇓ ⟨ h' | ε ⟩
 | O_LoopCut : ∀ γ e h,
-  γ ⊢ << h | Loop e >> ⇓ << h | Ok VUnit >>
+  γ ⊢ ⟨ h | Loop e ⟩ ⇓ ⟨ h | Ok VUnit ⟩
 | O_Alloc : ∀ γ h l,
   l ∉ dom h →
-  γ ⊢ << h | Alloc >> ⇓ << <[l:=Poison]>h | Ok (VLoc l) >>
+  γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ <[l:=Poison]>h | Ok (VLoc l) ⟩
 | O_AllocFreed : ∀ γ h l,
   h !! l = Some Freed →
-  γ ⊢ << h | Alloc >> ⇓ << <[l:=Poison]>h | Ok (VLoc l) >>
+  γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ <[l:=Poison]>h | Ok (VLoc l) ⟩
 | O_AlMLociss : ∀ γ h l, 
   l ∉ dom h →
-  γ ⊢ << h | Alloc >> ⇓ << h | Miss (MLoc l) >>
+  γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Free : ∀ γ p h l v,
   eval_pure p = Ok (VLoc l) → h !! l = Some v → v ≠ Freed →
-  γ ⊢ << h | Free p >> ⇓ << <[l:=Freed]>h | Ok VUnit >>
+  γ ⊢ ⟨ h | Free p ⟩ ⇓ ⟨ <[l:=Freed]>h | Ok VUnit ⟩
 | O_FreeFreed : ∀ γ p h l,
   eval_pure p = Ok (VLoc l) → h !! l = Some Freed →
-  γ ⊢ << h | Free p >> ⇓ << h | Err BotE >>
+  γ ⊢ ⟨ h | Free p ⟩ ⇓ ⟨ h | Err BotE ⟩
 | O_FreeMiss : ∀ γ p h l,
   eval_pure p = Ok (VLoc l) → l ∉ dom h →
-  γ ⊢ << h | Free p >> ⇓ << h | Miss (MLoc l) >>
+  γ ⊢ ⟨ h | Free p ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Store : ∀ γ p1 p2 h l v1 v2,
   eval_pure p1 = Ok (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → eval_pure p2 = Ok v2 →
-  γ ⊢ << h | Store p1 p2 >> ⇓ << <[l:=LangVal v2]>h | Ok VUnit>>
+  γ ⊢ ⟨ h | Store p1 p2 ⟩ ⇓ ⟨ <[l:=LangVal v2]>h | Ok VUnit⟩
 | O_StoreFreed : ∀ γ p1 p2 h l,
   eval_pure p1 = Ok (VLoc l) → h !! l = Some Freed →
-  γ ⊢ << h | Store p1 p2 >> ⇓ << h | Err BotE >>
+  γ ⊢ ⟨ h | Store p1 p2 ⟩ ⇓ ⟨ h | Err BotE ⟩
 | O_StoreMiss : ∀ γ p1 p2 h l,
   eval_pure p1 = Ok (VLoc l) → l ∉ dom h →
-  γ ⊢ << h | Store p1 p2 >> ⇓ << h | Miss (MLoc l) >>
+  γ ⊢ ⟨ h | Store p1 p2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Load : ∀ γ p h l v,
   eval_pure p = Ok (VLoc l) → h !! l = Some (LangVal v) →
-  γ ⊢ << h | Load p >> ⇓ << h | Ok v >>
+  γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Ok v ⟩
 | O_LoadFreed : ∀ γ p h l v,
   eval_pure p = Ok (VLoc l) → h !! l = Some v → v = Freed ∨ v = Poison →
-  γ ⊢ << h | Load p >> ⇓ << h | Err BotE >>
+  γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Err BotE ⟩
 | O_LoadMiss : ∀ γ p h l,
   eval_pure p = Ok (VLoc l) → l ∉ dom h →
-  γ ⊢ << h | Load p >> ⇓ << h | Miss (MLoc l) >>
+  γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Call : ∀ γ f xs e e' ps h h' ε,
-  γ !! f = Some (xs, e) → subst_l_pure xs ps e = Some e' → γ ⊢ << h | e' >> ⇓ << h' | ε >> →
-  γ ⊢ << h | Call f ps >> ⇓ << h' | ε >>
+  γ !! f = Some {(xs) e} → subst_l_pure xs ps e = Some e' → γ ⊢ ⟨ h | e' ⟩ ⇓ ⟨ h' | ε ⟩ →
+  γ ⊢ ⟨ h | Call f ps ⟩ ⇓ ⟨ h' | ε ⟩
 | O_CallMiss : ∀ γ f ps h,
   γ !! f = None →
-  γ ⊢ << h | Call f ps >> ⇓ << h | Miss (MFun f) >>
-where "γ ⊢ << h1 | e >> ⇓ << h2 | ε >>" := (eval_expr γ h1 e h2 ε).
+  γ ⊢ ⟨ h | Call f ps ⟩ ⇓ ⟨ h | Miss (MFun f) ⟩
+where "γ ⊢ ⟨ h1 | e ⟩ ⇓ ⟨ h2 | ε ⟩" := (eval_expr γ h1 e h2 ε).
 
 (* Under-approximate frame validity - frame addition *)
 Theorem ux_frame γ h e h' ε :
-  γ ⊢ << h | e >> ⇓ << h' | ε >> →
+  γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
   ((∃ v, ε = Ok v) ∨ (∃ ξ, ε = Err ξ)) →
-  ∀ hF γF, h' ##ₘ hF → γ ##ₘ γF → γ ∪ γF ⊢ << h ∪ hF | e >> ⇓ << h' ∪ hF | ε >> ∧ h ##ₘ hF.
+  ∀ hF γF, h' ##ₘ hF → γ ##ₘ γF → γ ∪ γF ⊢ ⟨ h ∪ hF | e ⟩ ⇓ ⟨ h' ∪ hF | ε ⟩ ∧ h ##ₘ hF.
 Proof.
   intros Hstep Hexit.
   induction Hstep; intros hF γF Hframe' Hγ.
@@ -252,11 +254,11 @@ Qed.
 
 (* Over-approximate frame validity - frame subtraction *)
 Theorem ox_frame γ h e h' ε :
-  γ ⊢ << h | e >> ⇓ << h' | ε >> →
+  γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
   ∀ hs hF γs γF, h = hs ∪ hF → hs ##ₘ hF → γ = γs ∪ γF → γs ##ₘ γF →
   ∃ hs', hs' ##ₘ hF ∧ (
-    (γs ⊢ << hs | e >> ⇓ << hs' | ε >> ∧ h' = hs' ∪ hF) ∨
-    (∃ m, γs ⊢ << hs | e >> ⇓ << hs' | Miss m >> ∧ (
+    (γs ⊢ ⟨ hs | e ⟩ ⇓ ⟨ hs' | ε ⟩ ∧ h' = hs' ∪ hF) ∨
+    (∃ m, γs ⊢ ⟨ hs | e ⟩ ⇓ ⟨ hs' | Miss m ⟩ ∧ (
       (∃ l, m = MLoc l ∧ l ∈ dom hF) ∨ (∃ f, m = MFun f ∧ f ∈ dom γF)
     ))
   ).
@@ -357,7 +359,7 @@ Proof.
   + exists hs. split; first done.
     left. split; last done. apply O_LoadMiss; first done. set_solver.
   + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
-    subst; assert ((γs ∪ γF) !! f = Some (xs, e)) as Hlookup by done.
+    subst; assert ((γs ∪ γF) !! f = Some {(xs) e}) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - exists hs'. split; first done.
       destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
@@ -365,7 +367,7 @@ Proof.
       * right. exists m. split; last done. eapply O_Call; try done.
     - exists hs. split; first done.
       right. exists (MFun f). split; first by eapply O_CallMiss.
-      right. exists f. split; first done. by apply (map_union_dom γs); first exists (xs, e).
+      right. exists f. split; first done. by apply (map_union_dom γs); first exists {(xs) e}.
   + exists hs. split; first done.
     left. split; last done. apply O_CallMiss.
     subst; assert ((γs ∪ γF) !! f = None) as Hlookup by done.

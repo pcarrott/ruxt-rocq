@@ -2,3 +2,5 @@
 
 gmap.v
 lang.v
+typing.v
+logic.v
