@@ -1,4 +1,5 @@
-From RUXt Require Export lang.
+From RUXt.lang Require Import semantics.
+From RUXt.lib Require Import gmap.
 
 
 (*** Assertion language ***)
@@ -31,22 +32,22 @@ Fixpoint subst_pure' (θ : sub) (p : pure) : pure :=
   | UnOp op p => UnOp op (subst_pure' θ p)
   | BinOp op p1 p2 => BinOp op (subst_pure' θ p1) (subst_pure' θ p2)
   end.
-Definition eval_pure' (θ : sub) (p : pure) : exit := eval_pure (subst_pure' θ p).
+Definition pure_to_exit' (θ : sub) (p : pure) : exit := pure_to_exit (subst_pure' θ p).
 (* Assertion satisfiability *)
 Fixpoint eval_asrt (θ : sub) (h : heap) (a : asrt) : Prop :=
   match a with
   | A_PureEq p1 p2 =>
-    h = ∅ ∧ ∃ v, eval_pure' θ p1 = Ok v ∧ eval_pure' θ p1 = eval_pure' θ p2
+    h = ∅ ∧ ∃ v, pure_to_exit' θ p1 = Ok v ∧ pure_to_exit' θ p1 = pure_to_exit' θ p2
   | A_PureTrue p =>
-    h = ∅ ∧ eval_pure' θ p = Ok (VBool true)
+    h = ∅ ∧ pure_to_exit' θ p = Ok (VBool true)
   | A_Emp =>
     h = ∅
   | A_Points p1 p2 =>
-    ∃ l v, eval_pure' θ p1 = Ok (VLoc l) ∧ eval_pure' θ p2 = Ok v ∧ h = {[l := LangVal v]}
+    ∃ l v, pure_to_exit' θ p1 = Ok (VLoc l) ∧ pure_to_exit' θ p2 = Ok v ∧ h = {[l := LangVal v]}
   | A_Freed p =>
-    ∃ l, eval_pure' θ p = Ok (VLoc l) ∧ h = {[l := Freed]}
+    ∃ l, pure_to_exit' θ p = Ok (VLoc l) ∧ h = {[l := Freed]}
   | A_Uninit p =>
-    ∃ l, eval_pure' θ p = Ok (VLoc l) ∧ h = {[l := Poison]}
+    ∃ l, pure_to_exit' θ p = Ok (VLoc l) ∧ h = {[l := Poison]}
   | A_False =>
     False
   | A_Implies a1 a2 =>

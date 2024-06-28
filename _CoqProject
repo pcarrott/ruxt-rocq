@@ -1,10 +1,8 @@
 -Q theories RUXt
 
 theories/lib/gmap.v
-
-theories/lang.v
-theories/assertion.v
-
+theories/lang/lang.v
+theories/lang/semantics.v
+theories/logic/assertion.v
 theories/types/own.v
-
 theories/logic/specs.v

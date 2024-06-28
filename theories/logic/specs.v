@@ -1,5 +1,7 @@
-From RUXt Require Export assertion.
+From RUXt.logic Require Export assertion.
+From RUXt.lang Require Import semantics.
 From RUXt.types Require Import own.
+From RUXt.lib Require Import gmap.
 
 
 (*** Under-approximate specifications ***)

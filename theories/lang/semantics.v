@@ -1,46 +1,22 @@
-From stdpp Require Export binders.
-From RUXt.lib Require Export gmap.
+From RUXt.lang Require Export lang.
+From RUXt.lib Require Import gmap.
 
 
-(* Heap locations *)
-Definition block : Set := positive.
-Definition loc : Set := block * Z.
+(*** Termination ***)
 
+(* Error values *)
+Inductive error := BotE.
+(* Miss values *)
+Inductive miss := MLoc (l : loc) | MFun (f : string).
+(* Termination tags *)
+Inductive exit := Ok (v : value) | Err (ξ : error) | Miss (m : miss).
+(* Evalutation errors *)
+Definition pure_to_exit (p : pure) : exit :=
+  match eval_pure p with
+  | Some v => Ok v
+  | None => Err BotE
+  end.
 
-(*** Language syntax ***)
-
-(* Language values *)
-Inductive value := VInt (n : Z) | VLoc (l : loc) | VBool (b : bool) | VUnit.
-(* Unary operations *)
-Inductive un_op := NotOp.
-(* Binary operations *)
-Inductive bin_op := PlusOp | EqOp.
-(* Pure expressions *)
-Inductive pure :=
-| Val (v : value)
-| Var (x : string)
-| UnOp (op : un_op) (p : pure)
-| BinOp (op : bin_op) (p1 p2 : pure).
-(* Language expressions *)
-Inductive expr :=
-| Pure (p : pure)
-| Error
-| Assume (p : pure)
-| Let (x : binder) (e1 e2 : expr)
-| Choice (e1 e2 : expr)
-| Loop (e : expr)
-| Alloc
-| Free (p : pure)
-| Store (p1 p2 : pure)
-| Load (p : pure)
-| Call (f : string) (ps : list pure).
-(* Syntactic sugar *)
-Notation If p e1 e2 := (Choice (Let BAnon (Assume p) e1) (Let BAnon (Assume (UnOp NotOp p)) e2)).
-Notation While p e := (Let BAnon (Loop (Let BAnon (Assume p) e)) (Assume (UnOp NotOp p))).
-Notation Assert p := (Choice (Assume p) (Let BAnon (Assume (UnOp NotOp p)) Error)).
-
-
-(*** Context and termination ***)
 
 (* Function implementations *)
 Record fun_impl := { params : list string; body : expr }.
@@ -49,91 +25,6 @@ Definition impl_ctx : Set := gmap string fun_impl.
 (* Heaps *)
 Inductive heap_val := LangVal (v : value) | Poison | Freed.
 Definition heap : Set := gmap loc heap_val.
-(* Error values *)
-Inductive error := BotE.
-(* Miss values *)
-Inductive miss := MLoc (l : loc) | MFun (f : string).
-(* Termination tags *)
-Inductive exit := Ok (v : value) | Err (ξ : error) | Miss (m : miss).
-
-
-(*** Evaluation ***)
-
-(* Unary operations *)
-Definition eval_un_op (op : un_op) (v : value) : exit :=
-  match op, v with
-  | NotOp, VBool b => Ok (VBool (negb b))
-  | _, _ => Err BotE
-  end.
-(* Binary operations *)
-Definition eval_bin_op (op : bin_op) (v1 v2 : value) : exit :=
-  match op, v1, v2 with
-  | PlusOp, VInt z1, VInt z2 => Ok (VInt (z1 + z2))
-  | EqOp, VInt z1, VInt z2 => Ok (VBool (Z.eqb z1 z2))
-  | _, _, _ => Err BotE
-  end.
-(* Pure expressions *)
-Fixpoint eval_pure (p : pure) : exit :=
-  match p with
-  | Val v => Ok v
-  | Var x => Err BotE
-  | UnOp op p =>
-    match eval_pure p with
-    | Ok v => eval_un_op op v
-    | _ => Err BotE
-    end
-  | BinOp op p1 p2 => 
-    match eval_pure p1, eval_pure p2 with
-    | Ok v1, Ok v2 => eval_bin_op op v1 v2
-    | _, _ => Err BotE
-    end
-  end.
-
-
-(*** Variable substitution ***)
-
-(* Pure expressions *)
-Fixpoint subst_pure (x : string) (v : value) (p : pure) : pure :=
-  match p with
-  | Val v => Val v
-  | Var y => if decide (x = y) then Val v else p
-  | UnOp op p => UnOp op (subst_pure x v p)
-  | BinOp op p1 p2 => BinOp op (subst_pure x v p1) (subst_pure x v p2)
-  end.
-(* Language expressions *)
-Fixpoint subst_expr (x : string) (v : value) (e : expr) : expr :=
-  match e with
-  | Pure p => Pure (subst_pure x v p)
-  | Error => Error
-  | Assume p => Assume (subst_pure x v p)
-  | Let y e1 e2 => if decide (y = BNamed x) then Let y (subst_expr x v e1) e2
-                   else Let y (subst_expr x v e1) (subst_expr x v e2)
-  | Choice e1 e2 => Choice (subst_expr x v e1) (subst_expr x v e2)
-  | Loop e => Loop (subst_expr x v e)
-  | Alloc => Alloc
-  | Free p => Free (subst_pure x v p)
-  | Store p1 p2 => Store (subst_pure x v p1) (subst_pure x v p2)
-  | Load p => Load (subst_pure x v p)
-  | Call f ps => Call f (subst_pure x v <$> ps)
-  end.
-(* Anonymous binders *)
-Definition subst (x : binder) (v : value) (e : expr) : expr :=
-  match x with BAnon => e | BNamed n => subst_expr n v e end.
-(* Multiple pure substitutions *)
-Fixpoint subst_l_pure (xs : list string) (ps : list pure) (e : expr) : option expr :=
-  match xs, ps with
-  | [], [] => Some e
-  | x :: xs, p :: ps => 
-    match eval_pure p with
-    | Ok v => (subst_expr x v) <$> subst_l_pure xs ps e
-    | _ => None
-    end
-  | _, _ => None
-  end.
-(* Multiple value substitutions *)
-Definition subst_l (xs : list string) (vs : list value) (e : expr) : option expr :=
-  subst_l_pure xs (Val <$> vs) e.
-
 
 (*** Operational semantics ***)
 
@@ -142,11 +33,11 @@ Reserved Notation "γ ⊢ ⟨ h1 | e ⟩ ⇓ ⟨ h2 | ε ⟩"
   (at level 100, no associativity).
 Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Pure : forall γ p h, 
-  γ ⊢ ⟨ h | Pure p ⟩ ⇓ ⟨ h | eval_pure p ⟩
+  γ ⊢ ⟨ h | Pure p ⟩ ⇓ ⟨ h | pure_to_exit p ⟩
 | O_Error : ∀ γ h, 
   γ ⊢ ⟨ h | Error ⟩ ⇓ ⟨ h | Err BotE ⟩
 | O_Assume : ∀ γ p h,
-  eval_pure p = Ok (VBool true) →
+  pure_to_exit p = Ok (VBool true) →
   γ ⊢ ⟨ h | Assume p ⟩ ⇓ ⟨ h | Ok VUnit ⟩
 | O_Let : ∀ γ x e1 e2 h h' h'' v ε,
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | subst x v e2 ⟩ ⇓ ⟨ h' | ε ⟩ →
@@ -175,31 +66,31 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
   l ∉ dom h →
   γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Free : ∀ γ p h l v,
-  eval_pure p = Ok (VLoc l) → h !! l = Some v → v ≠ Freed →
+  pure_to_exit p = Ok (VLoc l) → h !! l = Some v → v ≠ Freed →
   γ ⊢ ⟨ h | Free p ⟩ ⇓ ⟨ <[l:=Freed]>h | Ok VUnit ⟩
 | O_FreeFreed : ∀ γ p h l,
-  eval_pure p = Ok (VLoc l) → h !! l = Some Freed →
+  pure_to_exit p = Ok (VLoc l) → h !! l = Some Freed →
   γ ⊢ ⟨ h | Free p ⟩ ⇓ ⟨ h | Err BotE ⟩
 | O_FreeMiss : ∀ γ p h l,
-  eval_pure p = Ok (VLoc l) → l ∉ dom h →
+  pure_to_exit p = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Free p ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Store : ∀ γ p1 p2 h l v1 v2,
-  eval_pure p1 = Ok (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → eval_pure p2 = Ok v2 →
+  pure_to_exit p1 = Ok (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → pure_to_exit p2 = Ok v2 →
   γ ⊢ ⟨ h | Store p1 p2 ⟩ ⇓ ⟨ <[l:=LangVal v2]>h | Ok VUnit⟩
 | O_StoreFreed : ∀ γ p1 p2 h l,
-  eval_pure p1 = Ok (VLoc l) → h !! l = Some Freed →
+  pure_to_exit p1 = Ok (VLoc l) → h !! l = Some Freed →
   γ ⊢ ⟨ h | Store p1 p2 ⟩ ⇓ ⟨ h | Err BotE ⟩
 | O_StoreMiss : ∀ γ p1 p2 h l,
-  eval_pure p1 = Ok (VLoc l) → l ∉ dom h →
+  pure_to_exit p1 = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Store p1 p2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Load : ∀ γ p h l v,
-  eval_pure p = Ok (VLoc l) → h !! l = Some (LangVal v) →
+  pure_to_exit p = Ok (VLoc l) → h !! l = Some (LangVal v) →
   γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Ok v ⟩
 | O_LoadFreed : ∀ γ p h l v,
-  eval_pure p = Ok (VLoc l) → h !! l = Some v → v = Freed ∨ v = Poison →
+  pure_to_exit p = Ok (VLoc l) → h !! l = Some v → v = Freed ∨ v = Poison →
   γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Err BotE ⟩
 | O_LoadMiss : ∀ γ p h l,
-  eval_pure p = Ok (VLoc l) → l ∉ dom h →
+  pure_to_exit p = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Call : ∀ γ f i e ps h h' ε,
   γ !! f = Some i → subst_l_pure (params i) ps (body i) = Some e → γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →

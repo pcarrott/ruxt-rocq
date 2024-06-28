@@ -1,4 +1,5 @@
-From RUXt Require Import assertion.
+From RUXt.lang Require Import lang.
+From RUXt.logic Require Import assertion.
 
 
 (* TODO: Properly define this *)
