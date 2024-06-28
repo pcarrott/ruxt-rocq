@@ -1,5 +1,5 @@
 From stdpp Require Export binders.
-From RUXt Require Export gmap.
+From RUXt.lib Require Export gmap.
 
 
 (* Heap locations *)
@@ -10,13 +10,16 @@ Definition loc : Set := block * Z.
 (*** Language syntax ***)
 
 (* Language values *)
-Inductive val := VInt (n : Z) | VLoc (l : loc) | VBool (b : bool) | VUnit.
+Inductive value := VInt (n : Z) | VLoc (l : loc) | VBool (b : bool) | VUnit.
+(* Unary operations *)
+Inductive un_op := NotOp.
 (* Binary operations *)
 Inductive bin_op := PlusOp | EqOp.
 (* Pure expressions *)
 Inductive pure :=
-| Val (v : val)
+| Val (v : value)
 | Var (x : string)
+| UnOp (op : un_op) (p : pure)
 | BinOp (op : bin_op) (p1 p2 : pure).
 (* Language expressions *)
 Inductive expr :=
@@ -31,40 +34,57 @@ Inductive expr :=
 | Store (p1 p2 : pure)
 | Load (p : pure)
 | Call (f : string) (ps : list pure).
+(* Syntactic sugar *)
+Notation If p e1 e2 := (Choice (Let BAnon (Assume p) e1) (Let BAnon (Assume (UnOp NotOp p)) e2)).
+Notation While p e := (Let BAnon (Loop (Let BAnon (Assume p) e)) (Assume (UnOp NotOp p))).
+Notation Assert p := (Choice (Assume p) (Let BAnon (Assume (UnOp NotOp p)) Error)).
 
 
 (*** Context and termination ***)
 
 (* Function implementations *)
-Inductive fun_impl := FunImpl (xs : list string) (e : expr).
-Notation "{ ( xs ) e }" := (FunImpl xs e).
+Record fun_impl := { params : list string; body : expr }.
+Notation "{ ( xs ) e }" := {| params := xs; body := e |}.
 Definition impl_ctx : Set := gmap string fun_impl.
 (* Heaps *)
-Inductive heap_val := LangVal (v : val) | Poison | Freed.
+Inductive heap_val := LangVal (v : value) | Poison | Freed.
 Definition heap : Set := gmap loc heap_val.
 (* Error values *)
 Inductive error := BotE.
 (* Miss values *)
 Inductive miss := MLoc (l : loc) | MFun (f : string).
 (* Termination tags *)
-Inductive exit := Ok (v : val) | Err (ξ : error) | Miss (m : miss).
+Inductive exit := Ok (v : value) | Err (ξ : error) | Miss (m : miss).
 
 
 (*** Evaluation ***)
 
+(* Unary operations *)
+Definition eval_un_op (op : un_op) (v : value) : exit :=
+  match op, v with
+  | NotOp, VBool b => Ok (VBool (negb b))
+  | _, _ => Err BotE
+  end.
+(* Binary operations *)
+Definition eval_bin_op (op : bin_op) (v1 v2 : value) : exit :=
+  match op, v1, v2 with
+  | PlusOp, VInt z1, VInt z2 => Ok (VInt (z1 + z2))
+  | EqOp, VInt z1, VInt z2 => Ok (VBool (Z.eqb z1 z2))
+  | _, _, _ => Err BotE
+  end.
 (* Pure expressions *)
 Fixpoint eval_pure (p : pure) : exit :=
   match p with
   | Val v => Ok v
   | Var x => Err BotE
+  | UnOp op p =>
+    match eval_pure p with
+    | Ok v => eval_un_op op v
+    | _ => Err BotE
+    end
   | BinOp op p1 p2 => 
     match eval_pure p1, eval_pure p2 with
-    | Ok v1, Ok v2 =>
-      match op, v1, v2 with
-      | PlusOp, VInt z1, VInt z2 => Ok (VInt (z1 + z2))
-      | EqOp, VInt z1, VInt z2 => Ok (VBool (Z.eqb z1 z2))
-      | _, _, _ => Err BotE
-      end
+    | Ok v1, Ok v2 => eval_bin_op op v1 v2
     | _, _ => Err BotE
     end
   end.
@@ -73,14 +93,15 @@ Fixpoint eval_pure (p : pure) : exit :=
 (*** Variable substitution ***)
 
 (* Pure expressions *)
-Fixpoint subst_pure (x : string) (v : val) (p : pure) : pure :=
+Fixpoint subst_pure (x : string) (v : value) (p : pure) : pure :=
   match p with
   | Val v => Val v
   | Var y => if decide (x = y) then Val v else p
+  | UnOp op p => UnOp op (subst_pure x v p)
   | BinOp op p1 p2 => BinOp op (subst_pure x v p1) (subst_pure x v p2)
   end.
 (* Language expressions *)
-Fixpoint subst_expr (x : string) (v : val) (e : expr) : expr :=
+Fixpoint subst_expr (x : string) (v : value) (e : expr) : expr :=
   match e with
   | Pure p => Pure (subst_pure x v p)
   | Error => Error
@@ -96,7 +117,7 @@ Fixpoint subst_expr (x : string) (v : val) (e : expr) : expr :=
   | Call f ps => Call f (subst_pure x v <$> ps)
   end.
 (* Anonymous binders *)
-Definition subst (x : binder) (v : val) (e : expr) : expr :=
+Definition subst (x : binder) (v : value) (e : expr) : expr :=
   match x with BAnon => e | BNamed n => subst_expr n v e end.
 (* Multiple pure substitutions *)
 Fixpoint subst_l_pure (xs : list string) (ps : list pure) (e : expr) : option expr :=
@@ -110,7 +131,7 @@ Fixpoint subst_l_pure (xs : list string) (ps : list pure) (e : expr) : option ex
   | _, _ => None
   end.
 (* Multiple value substitutions *)
-Definition subst_l (xs : list string) (vs : list val) (e : expr) : option expr :=
+Definition subst_l (xs : list string) (vs : list value) (e : expr) : option expr :=
   subst_l_pure xs (Val <$> vs) e.
 
 
@@ -180,8 +201,8 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_LoadMiss : ∀ γ p h l,
   eval_pure p = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Call : ∀ γ f xs e e' ps h h' ε,
-  γ !! f = Some {(xs) e} → subst_l_pure xs ps e = Some e' → γ ⊢ ⟨ h | e' ⟩ ⇓ ⟨ h' | ε ⟩ →
+| O_Call : ∀ γ f i e ps h h' ε,
+  γ !! f = Some i → subst_l_pure (params i) ps (body i) = Some e → γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Call f ps ⟩ ⇓ ⟨ h' | ε ⟩
 | O_CallMiss : ∀ γ f ps h,
   γ !! f = None →
@@ -199,7 +220,7 @@ Proof.
   + split; last done. apply O_Pure.
   + split; last done. apply O_Error.
   + split; last done. by apply O_Assume.
-  + assert ((∃ v0 : val, Ok v = Ok v0) ∨ (∃ ξ : error, Ok v = Err ξ))
+  + assert ((∃ v0 : value, Ok v = Ok v0) ∨ (∃ ξ : error, Ok v = Err ξ))
       as Hexists by (by left; exists v).
     specialize (IHHstep2 Hexit hF γF Hframe' Hγ) as [Hstep2F Hframe''].
     specialize (IHHstep1 Hexists hF γF Hframe'' Hγ) as [Hstep1F Hframe].
@@ -359,7 +380,7 @@ Proof.
   + exists hs. split; first done.
     left. split; last done. apply O_LoadMiss; first done. set_solver.
   + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
-    subst; assert ((γs ∪ γF) !! f = Some {(xs) e}) as Hlookup by done.
+    subst; assert ((γs ∪ γF) !! f = Some i) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - exists hs'. split; first done.
       destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
@@ -367,7 +388,7 @@ Proof.
       * right. exists m. split; last done. eapply O_Call; try done.
     - exists hs. split; first done.
       right. exists (MFun f). split; first by eapply O_CallMiss.
-      right. exists f. split; first done. by apply (map_union_dom γs); first exists {(xs) e}.
+      right. exists f. split; first done. by apply (map_union_dom γs); first exists i.
   + exists hs. split; first done.
     left. split; last done. apply O_CallMiss.
     subst; assert ((γs ∪ γF) !! f = None) as Hlookup by done.

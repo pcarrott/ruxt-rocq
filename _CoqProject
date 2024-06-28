@@ -1,6 +1,10 @@
--Q . RUXt
+-Q theories RUXt
 
-gmap.v
-lang.v
-typing.v
-logic.v
+theories/lib/gmap.v
+
+theories/lang.v
+theories/assertion.v
+
+theories/types/own.v
+
+theories/logic/specs.v
