@@ -1,7 +1,7 @@
 From stdpp Require Export binders.
 
 
-(* Heap locations *)
+(* Memory locations *)
 Definition block : Set := positive.
 Definition loc : Set := block * Z.
 
@@ -9,7 +9,7 @@ Definition loc : Set := block * Z.
 (*** Language syntax ***)
 
 (* Language values *)
-Inductive value := VInt (n : Z) | VLoc (l : loc) | VBool (b : bool) | VUnit.
+Inductive value := VInt (z : Z) | VLoc (l : loc) | VBool (b : bool) | VUnit.
 (* Unary operations *)
 Inductive un_op := NotOp.
 (* Binary operations *)

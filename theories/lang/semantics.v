@@ -2,6 +2,17 @@ From RUXt.lang Require Export lang.
 From RUXt.lib Require Import gmap.
 
 
+(* Program context *)
+
+(* Function implementations *)
+Record fun_impl := { params : list string; body : expr }.
+Notation "{ ( xs ) e }" := {| params := xs; body := e |}.
+Definition impl_ctx : Set := gmap string fun_impl.
+(* Heaps *)
+Inductive heap_value := LangVal (v : value) | Poison | Freed.
+Definition heap : Set := gmap loc heap_value.
+
+
 (*** Termination ***)
 
 (* Error values *)
@@ -18,18 +29,10 @@ Definition pure_to_exit (p : pure) : exit :=
   end.
 
 
-(* Function implementations *)
-Record fun_impl := { params : list string; body : expr }.
-Notation "{ ( xs ) e }" := {| params := xs; body := e |}.
-Definition impl_ctx : Set := gmap string fun_impl.
-(* Heaps *)
-Inductive heap_val := LangVal (v : value) | Poison | Freed.
-Definition heap : Set := gmap loc heap_val.
-
 (*** Operational semantics ***)
 
 (* Inference rules *)
-Reserved Notation "γ ⊢ ⟨ h1 | e ⟩ ⇓ ⟨ h2 | ε ⟩"
+Reserved Notation "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩"
   (at level 100, no associativity).
 Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Pure : forall γ p h, 
@@ -62,7 +65,7 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_AllocFreed : ∀ γ h l,
   h !! l = Some Freed →
   γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ <[l:=Poison]>h | Ok (VLoc l) ⟩
-| O_AlMLociss : ∀ γ h l, 
+| O_AllocMiss : ∀ γ h l, 
   l ∉ dom h →
   γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Free : ∀ γ p h l v,
@@ -98,7 +101,7 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_CallMiss : ∀ γ f ps h,
   γ !! f = None →
   γ ⊢ ⟨ h | Call f ps ⟩ ⇓ ⟨ h | Miss (MFun f) ⟩
-where "γ ⊢ ⟨ h1 | e ⟩ ⇓ ⟨ h2 | ε ⟩" := (eval_expr γ h1 e h2 ε).
+where "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩" := (eval_expr γ h e h' ε).
 
 (* Under-approximate frame validity - frame addition *)
 Theorem ux_frame γ h e h' ε :
@@ -133,7 +136,7 @@ Proof.
     rewrite <- (insert_union_l h hF l Poison).
     split; last done. apply O_AllocFreed.
     rewrite (lookup_union_Some_raw h hF); by left.
-  + split; last done. apply O_AlMLociss.
+  + split; last done. apply O_AllocMiss.
     destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
   + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
     rewrite <- (insert_union_l h hF l Freed).
@@ -222,10 +225,10 @@ Proof.
     - exists (<[l:=Poison]>hs). split; first by (apply map_disjoint_insert; first exists Freed).
       left. split; last by rewrite <- (insert_union_l hs hF). by apply O_AllocFreed.
     - exists hs. split; first done.
-      right. exists (MLoc l). split; first by apply O_AlMLociss, not_elem_of_dom.
+      right. exists (MLoc l). split; first by apply O_AllocMiss, not_elem_of_dom.
       left. exists l. split; first done. by apply (map_union_dom hs); first exists Freed.
   + exists hs. split; first done.
-    left. split; last done. apply O_AlMLociss. set_solver.
+    left. split; last done. apply O_AllocMiss. set_solver.
   + subst; assert ((hs ∪ hF) !! l = Some v) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - exists (<[l:=Freed]>hs). split; first by (apply map_disjoint_insert; first exists v).

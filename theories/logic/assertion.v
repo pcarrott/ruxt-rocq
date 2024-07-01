@@ -88,7 +88,7 @@ Fixpoint to_typing (vs : list value) (τs : list type) : option (list typing) :=
 (* Type interpretation *)
 Definition own_type (t : typing) : asrt :=
   match t with
-  | TyOwned v τ => ⟦τ⟧([v])
+  | v ⊲ τ => ⟦τ⟧([v])
   end.
 Fixpoint interpret (𝕋 : list typing) : asrt :=
   match 𝕋 with
