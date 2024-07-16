@@ -1,4 +1,4 @@
-From RUXt.lang Require Export lang.
+From RUXt.lang Require Import lang.
 From RUXt.lib Require Import gmap.
 
 
@@ -9,24 +9,51 @@ Record fun_impl := { params : list string; body : expr }.
 Notation "{ ( xs ) e }" := {| params := xs; body := e |}.
 Definition impl_ctx : Set := gmap string fun_impl.
 (* Heaps *)
-Inductive heap_value := LangVal (v : value) | Poison | Freed.
+Inductive heap_value := LangVal (v : val) | Poison | Freed.
 Definition heap : Set := gmap loc heap_value.
 
 
 (*** Termination ***)
 
 (* Error values *)
-Inductive error := BotE.
+Inductive error := ECrash.
 (* Miss values *)
 Inductive miss := MLoc (l : loc) | MFun (f : string).
 (* Termination tags *)
-Inductive exit := Ok (v : value) | Err (ξ : error) | Miss (m : miss).
+Inductive exit := Ok (v : val) | Err (ξ : error) | Miss (m : miss).
 (* Evalutation errors *)
-Definition pure_to_exit (p : pure) : exit :=
-  match eval_pure p with
-  | Some v => Ok v
-  | None => Err BotE
-  end.
+Definition option_to_exit (o : option val) : exit :=
+  match o with Some v => Ok v | None => Err ECrash end.
+Definition var_to_exit (t : term) : exit := option_to_exit (eval_var t).
+Definition pure_to_exit (p : pure) : exit := option_to_exit (eval_pure p).
+
+(* Equality *)
+Global Instance error_eq_dec : EqDecision error.
+Proof. solve_decision. Defined.
+Global Instance miss_eq_dec : EqDecision miss.
+Proof. solve_decision. Defined.
+Global Instance exit_eq_dec : EqDecision exit.
+Proof. solve_decision. Defined.
+
+(* Countability *)
+Global Instance error_countable : Countable error.
+Proof.
+  refine (inj_countable' (λ ξ, match ξ with ECrash => () end)
+  (λ u, match u with () => ECrash end) _); by intros [].
+Qed.
+Global Instance miss_countable : Countable miss.
+Proof.
+  refine (inj_countable' (λ m, match m with MLoc l => inl l | MFun f => inr f end)
+  (λ s, match s with inl l => MLoc l | inr f => MFun f end) _); by intros [].
+Qed.
+Global Instance exit_countable : Countable exit.
+Proof.
+  refine (inj_countable' (λ ε, match ε with
+  | Ok v => (inl (inl v)) | Err ξ => (inl (inr ξ)) | Miss m => (inr m)
+  end) (λ s, match s with
+  | (inl (inl v)) => Ok v | (inl (inr ξ)) => Err ξ | (inr m) => Miss m
+  end) _); by intros [].
+Qed.
 
 
 (*** Operational semantics ***)
@@ -35,19 +62,23 @@ Definition pure_to_exit (p : pure) : exit :=
 Reserved Notation "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩"
   (at level 100, no associativity).
 Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
-| O_Pure : forall γ p h, 
-  γ ⊢ ⟨ h | Pure p ⟩ ⇓ ⟨ h | pure_to_exit p ⟩
+| O_Pure : ∀ γ p h v, 
+  pure_to_exit p = Ok v →
+  γ ⊢ ⟨ h | Pure p ⟩ ⇓ ⟨ h | Ok v ⟩
 | O_Error : ∀ γ h, 
-  γ ⊢ ⟨ h | Error ⟩ ⇓ ⟨ h | Err BotE ⟩
-| O_Assume : ∀ γ p h,
-  pure_to_exit p = Ok (VBool true) →
-  γ ⊢ ⟨ h | Assume p ⟩ ⇓ ⟨ h | Ok VUnit ⟩
+  γ ⊢ ⟨ h | Error ⟩ ⇓ ⟨ h | Err ECrash ⟩
+| O_Assume : ∀ γ t h,
+  var_to_exit t = Ok (VBool true) →
+  γ ⊢ ⟨ h | Assume t ⟩ ⇓ ⟨ h | Ok VUnit ⟩
 | O_Let : ∀ γ x e1 e2 h h' h'' v ε,
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | subst x v e2 ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
-| O_LetCut : ∀ γ x e1 e2 h h' ε,
-  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | ε ⟩ → ((∃ ξ, ε = Err ξ) ∨ (∃ m, ε = Miss m)) →
-  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
+| O_LetErr : ∀ γ x e1 e2 h h' ξ,
+  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Err ξ ⟩ →
+  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | Err ξ ⟩
+| O_LetMiss : ∀ γ x e1 e2 h h' m,
+  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Miss m ⟩ →
+  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | Miss m ⟩
 | O_Choice1 : ∀ γ e1 e2 h h' ε,
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
@@ -62,45 +93,39 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Alloc : ∀ γ h l,
   l ∉ dom h →
   γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ <[l:=Poison]>h | Ok (VLoc l) ⟩
-| O_AllocFreed : ∀ γ h l,
-  h !! l = Some Freed →
-  γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ <[l:=Poison]>h | Ok (VLoc l) ⟩
-| O_AllocMiss : ∀ γ h l, 
-  l ∉ dom h →
-  γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Free : ∀ γ p h l v,
-  pure_to_exit p = Ok (VLoc l) → h !! l = Some v → v ≠ Freed →
-  γ ⊢ ⟨ h | Free p ⟩ ⇓ ⟨ <[l:=Freed]>h | Ok VUnit ⟩
-| O_FreeFreed : ∀ γ p h l,
-  pure_to_exit p = Ok (VLoc l) → h !! l = Some Freed →
-  γ ⊢ ⟨ h | Free p ⟩ ⇓ ⟨ h | Err BotE ⟩
-| O_FreeMiss : ∀ γ p h l,
-  pure_to_exit p = Ok (VLoc l) → l ∉ dom h →
-  γ ⊢ ⟨ h | Free p ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Store : ∀ γ p1 p2 h l v1 v2,
-  pure_to_exit p1 = Ok (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → pure_to_exit p2 = Ok v2 →
-  γ ⊢ ⟨ h | Store p1 p2 ⟩ ⇓ ⟨ <[l:=LangVal v2]>h | Ok VUnit⟩
-| O_StoreFreed : ∀ γ p1 p2 h l,
-  pure_to_exit p1 = Ok (VLoc l) → h !! l = Some Freed →
-  γ ⊢ ⟨ h | Store p1 p2 ⟩ ⇓ ⟨ h | Err BotE ⟩
-| O_StoreMiss : ∀ γ p1 p2 h l,
-  pure_to_exit p1 = Ok (VLoc l) → l ∉ dom h →
-  γ ⊢ ⟨ h | Store p1 p2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Load : ∀ γ p h l v,
-  pure_to_exit p = Ok (VLoc l) → h !! l = Some (LangVal v) →
-  γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Ok v ⟩
-| O_LoadFreed : ∀ γ p h l v,
-  pure_to_exit p = Ok (VLoc l) → h !! l = Some v → v = Freed ∨ v = Poison →
-  γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Err BotE ⟩
-| O_LoadMiss : ∀ γ p h l,
-  pure_to_exit p = Ok (VLoc l) → l ∉ dom h →
-  γ ⊢ ⟨ h | Load p ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Call : ∀ γ f i e ps h h' ε,
-  γ !! f = Some i → subst_l_pure (params i) ps (body i) = Some e → γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
-  γ ⊢ ⟨ h | Call f ps ⟩ ⇓ ⟨ h' | ε ⟩
-| O_CallMiss : ∀ γ f ps h,
+| O_Free : ∀ γ t h l v,
+  var_to_exit t = Ok (VLoc l) → h !! l = Some v → v ≠ Freed →
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ <[l:=Freed]>h | Ok VUnit ⟩
+| O_FreeErr : ∀ γ t h l,
+  var_to_exit t = Ok (VLoc l) → h !! l = Some Freed →
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ECrash ⟩
+| O_FreeMiss : ∀ γ t h l,
+  var_to_exit t = Ok (VLoc l) → l ∉ dom h →
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+| O_Store : ∀ γ t1 t2 h l v1 v2,
+  var_to_exit t1 = Ok (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → var_to_exit t2 = Ok v2 →
+  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ <[l:=LangVal v2]>h | Ok VUnit⟩
+| O_StoreErr : ∀ γ t1 t2 h l,
+  var_to_exit t1 = Ok (VLoc l) → h !! l = Some Freed →
+  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Err ECrash ⟩
+| O_StoreMiss : ∀ γ t1 t2 h l,
+  var_to_exit t1 = Ok (VLoc l) → l ∉ dom h →
+  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+| O_Load : ∀ γ t h l v,
+  var_to_exit t = Ok (VLoc l) → h !! l = Some (LangVal v) →
+  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Ok v ⟩
+| O_LoadErr : ∀ γ t h l hv,
+  var_to_exit t = Ok (VLoc l) → h !! l = Some hv → hv = Freed ∨ hv = Poison →
+  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Err ECrash ⟩
+| O_LoadMiss : ∀ γ t h l,
+  var_to_exit t = Ok (VLoc l) → l ∉ dom h →
+  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+| O_Call : ∀ γ f i e ts h h' ε,
+  γ !! f = Some i → subst_l_var (params i) ts (body i) = Some e → γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
+  γ ⊢ ⟨ h | Call f ts ⟩ ⇓ ⟨ h' | ε ⟩
+| O_CallMiss : ∀ γ f ts h,
   γ !! f = None →
-  γ ⊢ ⟨ h | Call f ps ⟩ ⇓ ⟨ h | Miss (MFun f) ⟩
+  γ ⊢ ⟨ h | Call f ts ⟩ ⇓ ⟨ h | Miss (MFun f) ⟩
 where "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩" := (eval_expr γ h e h' ε).
 
 (* Under-approximate frame validity - frame addition *)
@@ -111,16 +136,18 @@ Theorem ux_frame γ h e h' ε :
 Proof.
   intros Hstep Hexit.
   induction Hstep; intros hF γF Hframe' Hγ.
-  + split; last done. apply O_Pure.
+  + split; last done. by apply O_Pure.
   + split; last done. apply O_Error.
   + split; last done. by apply O_Assume.
-  + assert ((∃ v0 : value, Ok v = Ok v0) ∨ (∃ ξ : error, Ok v = Err ξ))
+  + assert ((∃ v0 : val, Ok v = Ok v0) ∨ (∃ ξ : error, Ok v = Err ξ))
       as Hexists by (by left; exists v).
     specialize (IHHstep2 Hexit hF γF Hframe' Hγ) as [Hstep2F Hframe''].
     specialize (IHHstep1 Hexists hF γF Hframe'' Hγ) as [Hstep1F Hframe].
     split; last done. by eapply O_Let.
   + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
-    split; last done. by apply O_LetCut.
+    split; last done. by apply O_LetErr.
+  + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
+    split; last done. by apply O_LetMiss.
   + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
     split; last done. by apply O_Choice1.
   + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
@@ -133,16 +160,10 @@ Proof.
     split; last done. apply O_Alloc.
     rewrite <- not_elem_of_dom in HNone; set_solver.
   + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
-    rewrite <- (insert_union_l h hF l Poison).
-    split; last done. apply O_AllocFreed.
-    rewrite (lookup_union_Some_raw h hF); by left.
-  + split; last done. apply O_AllocMiss.
-    destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
-  + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
     rewrite <- (insert_union_l h hF l Freed).
     split; last done. eapply O_Free; try done.
     rewrite (lookup_union_Some_raw h hF); by left.
-  + split; last done. eapply O_FreeFreed; first done.
+  + split; last done. eapply O_FreeErr; first done.
     rewrite (lookup_union_Some_raw h hF); by left.
   + split; last done. apply O_FreeMiss; first done.
     destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
@@ -150,13 +171,13 @@ Proof.
     rewrite <- (insert_union_l h hF l (LangVal v2)).
     split; last done. eapply O_Store; try done.
     rewrite (lookup_union_Some_raw h hF); by left.
-  + split; last done. eapply O_StoreFreed; first done.
+  + split; last done. eapply O_StoreErr; first done.
     rewrite (lookup_union_Some_raw h hF); by left.
   + split; last done. apply O_StoreMiss; first done.
     destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
   + split; last done. eapply O_Load; first done.
     rewrite (lookup_union_Some_raw h hF); by left.
-  + split; last done. eapply O_LoadFreed; try done.
+  + split; last done. eapply O_LoadErr; try done.
     rewrite (lookup_union_Some_raw h hF); by left.
   + split; last done. apply O_LoadMiss; first done.
     destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
@@ -181,25 +202,30 @@ Proof.
   intros Hstep.
   induction Hstep; intros hs hF γs γF Hheap Hframe Hfun Hγ.
   + exists hs. split; first done.
-    left. split; last done. apply O_Pure.
+    left. split; last done. by apply O_Pure.
   + exists hs. split; first done.
     left. split; last done. apply O_Error.
   + exists hs. split; first done.
     left. split; last done. by apply O_Assume.
   + specialize (IHHstep1 hs hF γs γF Hheap Hframe Hfun Hγ) as [hs'' [Hframe'' Hstep1F]].
-    destruct Hstep1F as [[Hstep1F Hheap'']|[m [Hmiss Hdom]]].
+    destruct Hstep1F as [[Hstep1F Hheap'']|[ms [Hmiss Hdom]]].
     - specialize (IHHstep2 hs'' hF γs γF Hheap'' Hframe'' Hfun Hγ) as [hs' [Hframe' Hstep2F]].
       exists hs'. split; first done.
-      destruct Hstep2F as [[Hstep2F Hheap']|[m [Hmiss Hdom]]].
+      destruct Hstep2F as [[Hstep2F Hheap']|[ms [Hmiss Hdom]]].
       * left. split; last done. by eapply O_Let.
-      * right. exists m. split; last done. by eapply O_Let.
+      * right. exists ms. split; last done. by eapply O_Let.
     - exists hs''. split; first done.
-      right. exists m. split; last done. apply O_LetCut; first done. right. by exists m.
+      right. exists ms. split; last done. by apply O_LetMiss.
   + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
     exists hs'. split; first done.
-    destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
-    - left. split; last done. by eapply O_LetCut.
-    - right. exists m. split; last done. apply O_LetCut; first done. right. by exists m.
+    destruct HstepF as [[HstepF Hheap']|[ms [Hmiss Hdom]]].
+    - left. split; last done. by apply O_LetErr.
+    - right. exists ms. split; last done. by apply O_LetMiss.
+  + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+    exists hs'. split; first done.
+    destruct HstepF as [[HstepF Hheap']|[ms [Hmiss Hdom]]].
+    - left. split; last done. by apply O_LetMiss.
+    - right. exists ms. split; last done. by apply O_LetMiss.
   + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
     exists hs'. split; first done.
     destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
@@ -220,15 +246,6 @@ Proof.
   + exists (<[l:=Poison]>hs). split.
     { apply map_disjoint_insert_l_2; last done. apply not_elem_of_dom. set_solver. }
     left. split; last by rewrite <- (insert_union_l hs hF), Hheap. apply O_Alloc. set_solver.
-  + subst; assert ((hs ∪ hF) !! l = Some Freed) as Hlookup by done.
-    apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - exists (<[l:=Poison]>hs). split; first by (apply map_disjoint_insert; first exists Freed).
-      left. split; last by rewrite <- (insert_union_l hs hF). by apply O_AllocFreed.
-    - exists hs. split; first done.
-      right. exists (MLoc l). split; first by apply O_AllocMiss, not_elem_of_dom.
-      left. exists l. split; first done. by apply (map_union_dom hs); first exists Freed.
-  + exists hs. split; first done.
-    left. split; last done. apply O_AllocMiss. set_solver.
   + subst; assert ((hs ∪ hF) !! l = Some v) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - exists (<[l:=Freed]>hs). split; first by (apply map_disjoint_insert; first exists v).
@@ -239,7 +256,7 @@ Proof.
   + exists hs. split; first done.
     subst; assert ((hs ∪ hF) !! l = Some Freed) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - left. split; last done. by eapply O_FreeFreed.
+    - left. split; last done. by eapply O_FreeErr.
     - right. exists (MLoc l). split; first by apply O_FreeMiss, not_elem_of_dom.
       left. exists l. split; first done. by apply (map_union_dom hs); first exists Freed.
   + exists hs. split; first done.
@@ -254,7 +271,7 @@ Proof.
   + exists hs. split; first done.
     subst; assert ((hs ∪ hF) !! l = Some Freed) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - left. split; last done. by eapply O_StoreFreed.
+    - left. split; last done. by eapply O_StoreErr.
     - right. exists (MLoc l). split; first by apply O_StoreMiss, not_elem_of_dom.
       left. exists l. split; first done. by apply (map_union_dom hs); first exists Freed.
   + exists hs. split; first done.
@@ -266,11 +283,11 @@ Proof.
     - right. exists (MLoc l). split; first by apply O_LoadMiss, not_elem_of_dom.
       left. exists l. split; first done. by apply (map_union_dom hs); first exists (LangVal v).
   + exists hs. split; first done.
-    subst; assert ((hs ∪ hF) !! l = Some v) as Hlookup by done.
+    subst; assert ((hs ∪ hF) !! l = Some hv) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - left. split; last done. by eapply O_LoadFreed.
+    - left. split; last done. by eapply O_LoadErr.
     - right. exists (MLoc l). split; first by apply O_LoadMiss, not_elem_of_dom.
-      left. exists l. split; first done. by apply (map_union_dom hs); first exists v.
+      left. exists l. split; first done. by apply (map_union_dom hs); first exists hv.
   + exists hs. split; first done.
     left. split; last done. apply O_LoadMiss; first done. set_solver.
   + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].

@@ -2,6 +2,7 @@ From stdpp Require Export gmap.
 
 Section stdpp_extra.
   Context `{FinMapDom K M}.
+
   Lemma map_disjoint_insert {A} (m1 m2 : M A) i x :
     is_Some (m1 !! i) → m1 ##ₘ m2 → <[i:=x]> m1 ##ₘ m2.
   Proof.
