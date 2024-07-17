@@ -5,6 +5,9 @@ theories/lang/lang.v
 theories/lang/semantics.v
 theories/assertion/hprop.v
 theories/assertion/types.v
+theories/assertion/types/int.v
+theories/assertion/types/bool.v
+theories/assertion/types/unit.v
 theories/assertion/types/own.v
 theories/logic/specs.v
 theories/logic/typing.v
