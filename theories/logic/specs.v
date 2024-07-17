@@ -131,135 +131,135 @@ Theorem ux_soundness Γ P e ε Q :
 Proof.
   intros rule; induction rule.
   + intros γ Hval h Hemp.
-    exists h. split; first done. split; last by left; exists v.
+    eexists. split; first done. split; last by left; eexists.
     by apply O_Pure.
   + intros γ Hval h' HQ.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
     inversion HQ; inversion Hstep; subst.
-    exists ∅. split; first done. split; last by left; exists (VInt (-z)).
+    eexists. split; first done. split; last by left; eexists.
     by apply O_Pure, pure_neg_Ok.
   + intros γ Hval h' HQ.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
     inversion HQ; inversion Hstep; subst.
-    exists ∅. split; first done. split; last by left; exists (VBool (negb b)).
+    eexists. split; first done. split; last by left; eexists.
     by apply O_Pure, pure_not_Ok.
   + intros γ Hval h' HQ.
     specialize (IHrule1 _ Hval _ HQ) as [h1 [HP1 [Hstep1 Hε1]]].
     specialize (IHrule2 _ Hval _ HQ) as [h2 [HP2 [Hstep2 Hε2]]].
     inversion HQ; inversion Hstep1; inversion Hstep2; subst.
-    exists ∅. split; first done. split; last by left; exists (VInt (z1 + z2)).
+    eexists. split; first done. split; last by left; eexists.
     by apply O_Pure, pure_plus_Ok.
   + intros γ Hval h' HQ.
     specialize (IHrule1 _ Hval _ HQ) as [h1 [HP1 [Hstep1 Hε1]]].
     specialize (IHrule2 _ Hval _ HQ) as [h2 [HP2 [Hstep2 Hε2]]].
     inversion HQ; inversion Hstep1; inversion Hstep2; subst.
-    exists ∅. split; first done. split; last by left; exists (VBool (Z.eqb z1 z2)).
+    eexists. split; first done. split; last by left; eexists.
     by apply O_Pure, pure_eq_Ok.
   + intros γ Hval h Hemp.
-    exists h. split; first done. split; last by left; exists VUnit.
+    eexists. split; first done. split; last by left; eexists.
     by apply O_Assume.
   + intros γ Hval h Hemp.
-    exists h. split; first done. split; last by right; exists ECrash.
+    eexists. split; first done. split; last by right; eexists.
     by apply O_Error.
   + intros γ Hval h' HQ.
     specialize (IHrule2 _ Hval _ HQ) as [h'' [HR [Hstep Hε]]].
     specialize (IHrule1 _ Hval _ HR) as [h [HP [Hstep' Hε']]].
-    exists h. split; first done. split; last done.
+    eexists. split; first done. split; last done.
     by eapply O_Let.
   + intros γ Hval h' HQ.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
-    exists h. split; first done. split; last done.
+    eexists. split; first done. split; last done.
     by eapply O_LetErr.
   + intros γ Hval h' HQ.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
-    exists h. split; first done. split; last done.
+    eexists. split; first done. split; last done.
     by eapply O_Choice1.
   + intros γ Hval h' HQ.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
-    exists h. split; first done. split; last done.
+    eexists. split; first done. split; last done.
     by eapply O_Choice2.
   + intros γ Hval h' HQ.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
-    exists h. split; first done. split; last done.
+    eexists. split; first done. split; last done.
     by eapply O_Loop.
   + intros γ Hval h HP.
-    exists h. split; first done. split; last by left; exists VUnit.
+    eexists. split; first done. split; last by left; eexists.
     by apply O_LoopCut.
   + intros γ Hval h [l' [Hpure Hheap]].
     inversion Hpure; subst.
-    exists ∅. split; first done. split; last by left; exists (VLoc l').
+    eexists. split; first done. split; last by left; eexists.
     by apply O_Alloc.
   + intros γ Hval h [l [Hpure Hheap]].
+    replace h with (<[l := Freed]>{[l := LangVal v]} : heap)
+      by (subst; eapply insert_singleton).
     destruct t; inversion Hpure; subst.
-    set (h := (<[l := Freed]>{[l := LangVal v]} : heap)).
-    replace {[l := Freed]} with h by eapply insert_singleton.
-    exists {[l := LangVal v]}. split; first by exists l, v. split; last by left; exists VUnit.
+    eexists. split; first by do 2 eexists. split; last by left; eexists.
+    by eapply O_Free; try apply lookup_insert.
+  + intros γ Hval h [l [Hpure Hheap]].
+    replace h with (<[l := Freed]>{[l := Poison]} : heap)
+      by (subst; eapply insert_singleton).
+    destruct t; inversion Hpure; subst.
+    eexists. split; first by eexists. split; last by left; eexists.
     by eapply O_Free; try apply lookup_insert.
   + intros γ Hval h [l [Hpure Hheap]].
     destruct t; inversion Hpure; subst.
-    set (h := (<[l := Freed]>{[l := Poison]} : heap)).
-    replace {[l := Freed]} with h by eapply insert_singleton.
-    exists {[l := Poison]}. split; first by exists l. split; last by left; exists VUnit.
-    by eapply O_Free; try apply lookup_insert.
-  + intros γ Hval h [l [Hpure Hheap]].
-    destruct t; inversion Hpure; subst.
-    exists {[l := Freed]}. split; first by exists l. split; last by right; exists ECrash.
+    eexists. split; first by eexists. split; last by right; eexists.
     by eapply O_FreeErr; try apply lookup_insert.
   + intros γ Hval h [l [v2 [Hpure1 [Hpure2 Hheap]]]].
+    replace h with (<[l := LangVal v2]>{[l := LangVal v]} : heap)
+      by (subst; eapply insert_singleton).
     destruct t1; inversion Hpure1; subst.
     destruct t2; inversion Hpure2; subst.
-    set (h := <[l := LangVal v2]>{[l := LangVal v]} : heap).
-    replace {[l := LangVal v2]} with h by eapply insert_singleton.
-    exists {[l := LangVal v]}. split; first by exists l, v. split; last by left; exists VUnit.
+    eexists. split; first by do 2 eexists. split; last by left; eexists.
     by eapply O_Store; try apply lookup_insert.
   + intros γ Hval h [l [v2 [Hpure1 [Hpure2 Hheap]]]].
+    replace h with (<[l := LangVal v2]>{[l := Poison]} : heap)
+      by (subst; eapply insert_singleton).
     destruct t1; inversion Hpure1; subst.
     destruct t2; inversion Hpure2; subst.
-    set (h := (<[l := LangVal v2]>{[l := Poison]} : heap)).
-    replace {[l := LangVal v2]} with h by eapply insert_singleton.
-    exists {[l := Poison]}. split; first by exists l. split; last by left; exists VUnit.
+    eexists. split; first by eexists. split; last by left; eexists.
     by eapply O_Store; try apply lookup_insert.
   + intros γ Hval h [l [Hpure1 Hheap]].
     destruct t1; inversion Hpure1; subst.
-    exists {[l := Freed]}. split; first by exists l. split; last by right; exists ECrash.
+    eexists. split; first by eexists. split; last by right; eexists.
     by eapply O_StoreErr; try apply lookup_insert.
   + intros γ Hval h [l [vl [Hpurel [Hpurev Hheap]]]].
     destruct t; inversion Hpurel; subst.
     inversion Hpurev; subst.
-    exists {[l := LangVal vl]}. split; first by exists l, vl. split; last by left; exists vl.
+    eexists. split; first by do 2 eexists. split; last by left; eexists.
     by eapply O_Load; try apply lookup_insert.
   + intros γ Hval h [l [Hpure Hheap]].
     destruct t; inversion Hpure; subst.
-    exists {[l := Poison]}. split; first by exists l. split; last by right; exists ECrash.
+    eexists. split; first by eexists. split; last by right; eexists.
     by eapply O_LoadErr; try right; try apply lookup_insert.
   + intros γ Hval h [l [Hpure Hheap]].
     destruct t; inversion Hpure; subst.
-    exists {[l := Freed]}. split; first by exists l. split; last by right; exists ECrash.
+    eexists. split; first by eexists. split; last by right; eexists.
     by eapply O_LoadErr; try left; try apply lookup_insert.
   + intros γ Hval h' [hQ [hR [-> [Hdisj [HQ HR]]]]].
     specialize (IHrule _ Hval _ HQ) as [hP [HP [Hstep Hε]]].
-    specialize (ux_frame _ _ _ _ _ Hstep Hε _ _ Hdisj (map_disjoint_empty_r γ)).
+    specialize (ux_frame _ _ _ _ _ Hstep Hε _ _ Hdisj (map_disjoint_empty_r _)).
     rewrite (map_union_empty γ). intros [].
-    exists (hP ∪ hR). split; last done. by exists hP, hR.
+    eexists. split; last done. by do 2 eexists.
   + intros γ Hval h' [HQ1|HQ2].
     - specialize (IHrule1 _ Hval _ HQ1) as [h [HP [Hstep Hε]]].
-      exists h. split; last done. by left.
+      eexists. split; last done. by left.
     - specialize (IHrule2 _ Hval _ HQ2) as [h [HP [Hstep Hε]]].
-      exists h. split; last done. by right.
+      eexists. split; last done. by right.
   + intros γ Hval h' HQ.
     assert (⊢ (Q ⇒ Q')) as HQent by done; apply HQent in HQ.
     eapply env_inclusion in Hval; last done.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
     assert (⊢ (P' ⇒ P)) as HPent by done; apply HPent in HP.
-    by exists h.
+    by eexists.
   + intros γ Hval h' [v HQ].
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
-    exists h. by split; first by exists v.
+    eexists. by split; first by eexists.
   + intros γ Hval h' HQ. subst.
     assert (Γ !! f = Some specs ∧ [ (vs) P | ε, Q] ∈ specs) as [HΓsome Hspec] by done.
     specialize (Hval _ _ HΓsome _ Hspec) as [i [e [Hγsome [Hsubst Hux]]]].
     specialize (Hux _ HQ) as [h [HP [Hstep Hε]]].
-    exists h. split; first done. split; last done.
+    eexists. split; first done. split; last done.
     by eapply O_Call.
 Qed.
 
@@ -272,9 +272,9 @@ Proof.
   + intros f' S HΓsome s Hin.
     apply lookup_insert_Some in HΓsome as [[_ <-]|[? HΓsome]]; first inversion Hin.
     specialize (IHrule _ _ HΓsome _ Hin) as [i [es [Hγsome [Hsubst Hux]]]].
-    exists i, es. split; first by rewrite (lookup_insert_ne γ). split; first done.
+    do 2 eexists. split; first by rewrite (lookup_insert_ne γ). split; first done.
     intros h' HQ. specialize (Hux _ HQ) as [h [HP [Hstep Hε]]].
-    exists h. split; first done. split; last done.
+    eexists. split; first done. split; last done.
     rewrite (insert_union_singleton_r γ); last by apply not_elem_of_dom.
     rewrite <- (map_union_empty h), <- (map_union_empty h').
     apply ux_frame; try done; first apply map_disjoint_empty_r.
@@ -283,5 +283,5 @@ Proof.
     apply lookup_alter_Some in HΓsome as [[<- [? [? ->]]]|[]]; last by eapply IHrule.
     assert (Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉) as Hrule by done.
     specialize (ux_soundness _ _ _ _ _ Hrule _ IHrule); intros Hux.
-    apply elem_of_cons in Hin as [->|]; last by eapply IHrule. by exists i, e.
+    apply elem_of_cons in Hin as [->|]; last by eapply IHrule. by do 2 eexists.
 Qed.

@@ -170,51 +170,51 @@ Proof.
   + split; last done. by apply O_Pure.
   + split; last done. apply O_Error.
   + split; last done. by apply O_Assume.
-  + assert ((∃ v0 : val, Ok v = Ok v0) ∨ (∃ ξ : error, Ok v = Err ξ))
-      as Hexists by (by left; exists v).
-    specialize (IHHstep2 Hexit hF γF Hframe' Hγ) as [Hstep2F Hframe''].
-    specialize (IHHstep1 Hexists hF γF Hframe'' Hγ) as [Hstep1F Hframe].
+  + assert ((∃ v' : val, Ok v = Ok v') ∨ (∃ ξ : error, Ok v = Err ξ))
+      as Hexists by (by left; eexists).
+    specialize (IHHstep2 Hexit _ _ Hframe' Hγ) as [Hstep2F Hframe''].
+    specialize (IHHstep1 Hexists _ _ Hframe'' Hγ) as [Hstep1F Hframe].
     split; last done. by eapply O_Let.
-  + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
+  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
     split; last done. by apply O_LetErr.
-  + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
+  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
     split; last done. by apply O_LetMiss.
-  + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
+  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
     split; last done. by apply O_Choice1.
-  + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
+  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
     split; last done. by apply O_Choice2.
-  + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
+  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
     split; last done. by apply O_Loop.
   + split; last done. apply O_LoopCut.
   + apply map_disjoint_insert_l in Hframe' as [HNone Hframe].
-    rewrite <- (insert_union_l h hF l Poison).
+    rewrite <- (insert_union_l h).
     split; last done. apply O_Alloc.
     rewrite <- not_elem_of_dom in HNone; set_solver.
   + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
-    rewrite <- (insert_union_l h hF l Freed).
+    rewrite <- (insert_union_l h).
     split; last done. eapply O_Free; try done.
-    rewrite (lookup_union_Some_raw h hF); by left.
+    apply lookup_union_Some_raw; by left.
   + split; last done. eapply O_FreeErr; first done.
-    rewrite (lookup_union_Some_raw h hF); by left.
+    apply lookup_union_Some_raw; by left.
   + split; last done. apply O_FreeMiss; first done.
     destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
   + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
-    rewrite <- (insert_union_l h hF l (LangVal v2)).
+    rewrite <- (insert_union_l h).
     split; last done. eapply O_Store; try done.
-    rewrite (lookup_union_Some_raw h hF); by left.
+    apply lookup_union_Some_raw; by left.
   + split; last done. eapply O_StoreErr; first done.
-    rewrite (lookup_union_Some_raw h hF); by left.
+    apply lookup_union_Some_raw; by left.
   + split; last done. apply O_StoreMiss; first done.
     destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
   + split; last done. eapply O_Load; first done.
-    rewrite (lookup_union_Some_raw h hF); by left.
+    apply lookup_union_Some_raw; by left.
   + split; last done. eapply O_LoadErr; try done.
-    rewrite (lookup_union_Some_raw h hF); by left.
+    apply lookup_union_Some_raw; by left.
   + split; last done. apply O_LoadMiss; first done.
     destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
-  + specialize (IHHstep Hexit hF γF Hframe' Hγ) as [HstepF Hframe].
+  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
     split; last done. eapply O_Call; try done.
-    rewrite (lookup_union_Some_raw γ γF); by left.
+    apply lookup_union_Some_raw; by left.
   + split; last done. apply O_CallMiss; try done.
     destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
 Qed.
@@ -232,107 +232,105 @@ Theorem ox_frame γ h e h' ε :
 Proof.
   intros Hstep.
   induction Hstep; intros hs hF γs γF Hheap Hframe Hfun Hγ.
-  + exists hs. split; first done.
+  + eexists. split; first done.
     left. split; last done. by apply O_Pure.
-  + exists hs. split; first done.
+  + eexists. split; first done.
     left. split; last done. apply O_Error.
-  + exists hs. split; first done.
+  + eexists. split; first done.
     left. split; last done. by apply O_Assume.
-  + specialize (IHHstep1 hs hF γs γF Hheap Hframe Hfun Hγ) as [hs'' [Hframe'' Hstep1F]].
+  + specialize (IHHstep1 _ _ _ _ Hheap Hframe Hfun Hγ) as [hs'' [Hframe'' Hstep1F]].
     destruct Hstep1F as [[Hstep1F Hheap'']|[ms [Hmiss Hdom]]].
-    - specialize (IHHstep2 hs'' hF γs γF Hheap'' Hframe'' Hfun Hγ) as [hs' [Hframe' Hstep2F]].
-      exists hs'. split; first done.
+    - specialize (IHHstep2 _ _ _ _ Hheap'' Hframe'' Hfun Hγ) as [hs' [Hframe' Hstep2F]].
+      eexists. split; first done.
       destruct Hstep2F as [[Hstep2F Hheap']|[ms [Hmiss Hdom]]].
       * left. split; last done. by eapply O_Let.
-      * right. exists ms. split; last done. by eapply O_Let.
-    - exists hs''. split; first done.
-      right. exists ms. split; last done. by apply O_LetMiss.
-  + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
-    exists hs'. split; first done.
+      * right. eexists. split; last done. by eapply O_Let.
+    - eexists. split; first done.
+      right. eexists. split; last done. by apply O_LetMiss.
+  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+    eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[ms [Hmiss Hdom]]].
     - left. split; last done. by apply O_LetErr.
-    - right. exists ms. split; last done. by apply O_LetMiss.
-  + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
-    exists hs'. split; first done.
+    - right. eexists. split; last done. by apply O_LetMiss.
+  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+    eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[ms [Hmiss Hdom]]].
     - left. split; last done. by apply O_LetMiss.
-    - right. exists ms. split; last done. by apply O_LetMiss.
-  + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
-    exists hs'. split; first done.
+    - right. eexists. split; last done. by apply O_LetMiss.
+  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+    eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
     - left. split; last done. by apply O_Choice1.
-    - right. exists m. split; last done. by apply O_Choice1.
-  + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
-    exists hs'. split; first done.
+    - right. eexists. split; last done. by apply O_Choice1.
+  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+    eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
     - left. split; last done. by apply O_Choice2.
-    - right. exists m. split; last done. by apply O_Choice2.
-  + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
-    exists hs'. split; first done.
+    - right. eexists. split; last done. by apply O_Choice2.
+  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+    eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
     - left. split; last done. by apply O_Loop.
-    - right. exists m. split; last done. by apply O_Loop.
-  + exists hs. split; first done. left.
+    - right. eexists. split; last done. by apply O_Loop.
+  + eexists. split; first done. left.
     split; last done. apply O_LoopCut.
-  + exists (<[l:=Poison]>hs). split.
-    { apply map_disjoint_insert_l_2; last done. apply not_elem_of_dom. set_solver. }
-    left. split; last by rewrite <- (insert_union_l hs hF), Hheap. apply O_Alloc. set_solver.
-  + subst; assert ((hs ∪ hF) !! l = Some v) as Hlookup by done.
+  + eexists. split; first by subst; apply map_disjoint_union_insert. left.
+    split; last by rewrite <- insert_union_l, Hheap. apply O_Alloc. set_solver.
+  + subst; assert (_ !! l = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - exists (<[l:=Freed]>hs). split; first by (apply map_disjoint_insert; first exists v).
-      left. split; last by rewrite <- (insert_union_l hs hF). by eapply O_Free.
-    - exists hs. split; first done.
-      right. exists (MLoc l). split; first by apply O_FreeMiss, not_elem_of_dom.
-      left. exists l. split; first done. by apply (map_union_dom hs); first exists v.
-  + exists hs. split; first done.
-    subst; assert ((hs ∪ hF) !! l = Some Freed) as Hlookup by done.
+    - eexists. split; first by (apply map_disjoint_insert; first eexists).
+      left. split; last by rewrite <- insert_union_l. by eapply O_Free.
+    - eexists. split; first done.
+      right. eexists. split; first by apply O_FreeMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
+    subst; assert (_ !! l = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. split; last done. by eapply O_FreeErr.
-    - right. exists (MLoc l). split; first by apply O_FreeMiss, not_elem_of_dom.
-      left. exists l. split; first done. by apply (map_union_dom hs); first exists Freed.
-  + exists hs. split; first done.
+    - right. eexists. split; first by apply O_FreeMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
     left. split; last done. apply O_FreeMiss; first done. set_solver.
-  + subst; assert ((hs ∪ hF) !! l = Some v1) as Hlookup by done.
+  + subst; assert (_ !! l = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - exists (<[l:=LangVal v2]>hs). split; first by (apply map_disjoint_insert; first exists v1).
-      left. split; last by rewrite <- (insert_union_l hs hF). by eapply O_Store.
-    - exists hs. split; first done.
-      right. exists (MLoc l). split; first by apply O_StoreMiss, not_elem_of_dom.
-      left. exists l. split; first done. by apply (map_union_dom hs); first exists v1.
-  + exists hs. split; first done.
-    subst; assert ((hs ∪ hF) !! l = Some Freed) as Hlookup by done.
+    - eexists. split; first by (apply map_disjoint_insert; first eexists).
+      left. split; last by rewrite <- insert_union_l. by eapply O_Store.
+    - eexists. split; first done.
+      right. eexists. split; first by apply O_StoreMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
+    subst; assert (_ !! l = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. split; last done. by eapply O_StoreErr.
-    - right. exists (MLoc l). split; first by apply O_StoreMiss, not_elem_of_dom.
-      left. exists l. split; first done. by apply (map_union_dom hs); first exists Freed.
-  + exists hs. split; first done.
+    - right. eexists. split; first by apply O_StoreMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
     left. split; last done. apply O_StoreMiss; first done. set_solver.
-  + exists hs. split; first done.
-    subst; assert ((hs ∪ hF) !! l = Some (LangVal v)) as Hlookup by done.
+  + eexists. split; first done.
+    subst; assert (_ !! l = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. split; last done. by eapply O_Load.
-    - right. exists (MLoc l). split; first by apply O_LoadMiss, not_elem_of_dom.
-      left. exists l. split; first done. by apply (map_union_dom hs); first exists (LangVal v).
-  + exists hs. split; first done.
-    subst; assert ((hs ∪ hF) !! l = Some hv) as Hlookup by done.
+    - right. eexists. split; first by apply O_LoadMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
+    subst; assert (_ !! l = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. split; last done. by eapply O_LoadErr.
-    - right. exists (MLoc l). split; first by apply O_LoadMiss, not_elem_of_dom.
-      left. exists l. split; first done. by apply (map_union_dom hs); first exists hv.
-  + exists hs. split; first done.
+    - right. eexists. split; first by apply O_LoadMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
     left. split; last done. apply O_LoadMiss; first done. set_solver.
-  + specialize (IHHstep hs hF γs γF Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
-    subst; assert ((γs ∪ γF) !! f = Some i) as Hlookup by done.
+  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+    subst; assert (_ !! f = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - exists hs'. split; first done.
+    - eexists. split; first done.
       destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
       * left. split; last done. eapply O_Call; try done.
-      * right. exists m. split; last done. eapply O_Call; try done.
+      * right. eexists. split; last done. eapply O_Call; try done.
     - exists hs. split; first done.
-      right. exists (MFun f). split; first by eapply O_CallMiss.
-      right. exists f. split; first done. by apply (map_union_dom γs); first exists i.
-  + exists hs. split; first done.
+      right. eexists. split; first by eapply O_CallMiss.
+      right. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
     left. split; last done. apply O_CallMiss.
-    subst; assert ((γs ∪ γF) !! f = None) as Hlookup by done.
-    by apply lookup_union_None in Hlookup as [].
+    by eapply (lookup_union_None γs γF); subst.
 Qed.

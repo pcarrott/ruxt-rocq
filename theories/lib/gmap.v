@@ -16,4 +16,12 @@ Section stdpp_extra.
     intros HSome HNone. apply elem_of_dom.
     apply lookup_union_is_Some in HSome as [[v HSome]|HSome]; congruence.
   Qed.
+
+  Lemma map_disjoint_union_insert {A} (m1 m2 : M A) i x :
+    m1 ##ₘ m2 → i ∉ dom (m1 ∪ m2) → <[i:=x]> m1 ##ₘ m2.
+  Proof.
+    intros Hdisj Hnin. apply map_disjoint_insert_l_2; last done.
+    apply not_elem_of_dom. intros Hin.
+    apply Hnin, dom_union, elem_of_union. by right.
+  Qed.
 End stdpp_extra.

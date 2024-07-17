@@ -17,7 +17,7 @@ Proof.
     by specialize (Hox _ (HPimp h HPux) _ _ Hstep) as [HQox _].
   + intros h' HQux. apply Hux in HQux as [h [HPux [Hstep Hε]]].
     specialize (Hox _ (HPimp h HPux) _ _ Hstep) as [HQox Hexit].
-    exists ∅. split; first done. apply map_empty_subseteq.
+    eexists. split; first done. apply map_empty_subseteq.
 Qed.
 Theorem principle_of_denial γ e Pₒₓ Qₒₓ v Pᵤₓ Qᵤₓ ε :
   ux_triple γ e Pᵤₓ Qᵤₓ ε →

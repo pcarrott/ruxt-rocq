@@ -19,9 +19,9 @@ Next Obligation. by intros. Qed.
 Next Obligation. by intros. Qed.
 Next Obligation.
   intros τ vs h H. destruct vs; first by inversion H.
-  destruct v; destruct vs; try by inversion H. exists ∅.
+  destruct v; destruct vs; try by inversion H. eexists.
   destruct τ; simpl in H; first destruct H as [v H].
-  all: split; first done; apply map_empty_subseteq.
+  all: split; first done; subst; apply map_empty_subseteq.
 Qed.
 
 Definition own_val τ := own (Some τ).

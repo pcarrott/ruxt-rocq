@@ -16,6 +16,6 @@ Next Obligation. by intros. Qed.
 Next Obligation. by intros. Qed.
 Next Obligation.
   intros vs h H. destruct vs; first by inversion H.
-  destruct v; destruct vs; try by inversion H. exists ∅.
-  destruct H as [v H]. split; first done. apply map_empty_subseteq.
+  destruct v; destruct vs; try by inversion H. eexists.
+  destruct H as [v H]. split; first done. subst; apply map_empty_subseteq.
 Qed.
