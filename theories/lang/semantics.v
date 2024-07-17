@@ -5,12 +5,12 @@ From RUXt.lib Require Import gmap.
 (* Program context *)
 
 (* Function implementations *)
-Record fun_impl := { params : list string; body : expr }.
-Notation "{ ( xs ) e }" := {| params := xs; body := e |}.
-Definition impl_ctx : Set := gmap string fun_impl.
+Record fun_impl := mk_fun_impl { params : list string; body : expr }.
+Notation "{ ( xs ) e }" := (mk_fun_impl xs e).
+Definition impl_ctx := gmap string fun_impl.
 (* Heaps *)
 Inductive heap_value := LangVal (v : val) | Poison | Freed.
-Definition heap : Set := gmap loc heap_value.
+Definition heap := gmap loc heap_value.
 
 
 (*** Termination ***)
@@ -24,8 +24,39 @@ Inductive exit := Ok (v : val) | Err (ξ : error) | Miss (m : miss).
 (* Evalutation errors *)
 Definition option_to_exit (o : option val) : exit :=
   match o with Some v => Ok v | None => Err ECrash end.
-Definition var_to_exit (t : term) : exit := option_to_exit (eval_var t).
+Definition term_to_exit (t : term) : exit := option_to_exit (eval_term t).
 Definition pure_to_exit (p : pure) : exit := option_to_exit (eval_pure p).
+(* Properties *)
+Lemma pure_neg_Ok p z :
+  pure_to_exit p = Ok (VInt z) → pure_to_exit (PNeg p) = Ok (VInt (-z)).
+Proof.
+  unfold pure_to_exit, option_to_exit; simpl. intros Hok.
+  destruct (eval_pure p); last by exfalso.
+  by inversion Hok; subst; simpl.
+Qed.
+Lemma pure_not_Ok p b :
+  pure_to_exit p = Ok (VBool b) → pure_to_exit (PNot p) = Ok (VBool (negb b)).
+Proof.
+  unfold pure_to_exit, option_to_exit; simpl. intros Hok.
+  destruct (eval_pure p); last by exfalso.
+  by inversion Hok; subst; simpl.
+Qed.
+Lemma pure_plus_Ok p1 p2 z1 z2 :
+  pure_to_exit p1 = Ok (VInt z1) → pure_to_exit p2 = Ok (VInt z2) →
+  pure_to_exit (PPlus p1 p2) = Ok (VInt (z1 + z2)).
+Proof.
+  unfold pure_to_exit, option_to_exit; simpl. intros Hok1 Hok2.
+  destruct (eval_pure p1); destruct (eval_pure p2); try by exfalso.
+  by inversion Hok1; inversion Hok2; subst; simpl.
+Qed.
+Lemma pure_eq_Ok p1 p2 z1 z2 :
+  pure_to_exit p1 = Ok (VInt z1) → pure_to_exit p2 = Ok (VInt z2) →
+  pure_to_exit (PEq p1 p2) = Ok (VBool (Z.eqb z1 z2)).
+Proof.
+  unfold pure_to_exit, option_to_exit; simpl. intros Hok1 Hok2.
+  destruct (eval_pure p1); destruct (eval_pure p2); try by exfalso.
+  by inversion Hok1; inversion Hok2; subst; simpl.
+Qed.
 
 (* Equality *)
 Global Instance error_eq_dec : EqDecision error.
@@ -68,7 +99,7 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Error : ∀ γ h, 
   γ ⊢ ⟨ h | Error ⟩ ⇓ ⟨ h | Err ECrash ⟩
 | O_Assume : ∀ γ t h,
-  var_to_exit t = Ok (VBool true) →
+  term_to_exit t = Ok (VBool true) →
   γ ⊢ ⟨ h | Assume t ⟩ ⇓ ⟨ h | Ok VUnit ⟩
 | O_Let : ∀ γ x e1 e2 h h' h'' v ε,
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | subst x v e2 ⟩ ⇓ ⟨ h' | ε ⟩ →
@@ -94,34 +125,34 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
   l ∉ dom h →
   γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ <[l:=Poison]>h | Ok (VLoc l) ⟩
 | O_Free : ∀ γ t h l v,
-  var_to_exit t = Ok (VLoc l) → h !! l = Some v → v ≠ Freed →
+  term_to_exit t = Ok (VLoc l) → h !! l = Some v → v ≠ Freed →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ <[l:=Freed]>h | Ok VUnit ⟩
 | O_FreeErr : ∀ γ t h l,
-  var_to_exit t = Ok (VLoc l) → h !! l = Some Freed →
+  term_to_exit t = Ok (VLoc l) → h !! l = Some Freed →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ECrash ⟩
 | O_FreeMiss : ∀ γ t h l,
-  var_to_exit t = Ok (VLoc l) → l ∉ dom h →
+  term_to_exit t = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Store : ∀ γ t1 t2 h l v1 v2,
-  var_to_exit t1 = Ok (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → var_to_exit t2 = Ok v2 →
+  term_to_exit t1 = Ok (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → term_to_exit t2 = Ok v2 →
   γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ <[l:=LangVal v2]>h | Ok VUnit⟩
 | O_StoreErr : ∀ γ t1 t2 h l,
-  var_to_exit t1 = Ok (VLoc l) → h !! l = Some Freed →
+  term_to_exit t1 = Ok (VLoc l) → h !! l = Some Freed →
   γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Err ECrash ⟩
 | O_StoreMiss : ∀ γ t1 t2 h l,
-  var_to_exit t1 = Ok (VLoc l) → l ∉ dom h →
+  term_to_exit t1 = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Load : ∀ γ t h l v,
-  var_to_exit t = Ok (VLoc l) → h !! l = Some (LangVal v) →
+  term_to_exit t = Ok (VLoc l) → h !! l = Some (LangVal v) →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Ok v ⟩
 | O_LoadErr : ∀ γ t h l hv,
-  var_to_exit t = Ok (VLoc l) → h !! l = Some hv → hv = Freed ∨ hv = Poison →
+  term_to_exit t = Ok (VLoc l) → h !! l = Some hv → hv = Freed ∨ hv = Poison →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Err ECrash ⟩
 | O_LoadMiss : ∀ γ t h l,
-  var_to_exit t = Ok (VLoc l) → l ∉ dom h →
+  term_to_exit t = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Call : ∀ γ f i e ts h h' ε,
-  γ !! f = Some i → subst_l_var (params i) ts (body i) = Some e → γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
+  γ !! f = Some i → subst_terms (params i) ts (body i) = Some e → γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Call f ts ⟩ ⇓ ⟨ h' | ε ⟩
 | O_CallMiss : ∀ γ f ts h,
   γ !! f = None →
