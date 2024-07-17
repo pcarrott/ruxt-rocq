@@ -25,8 +25,8 @@ Definition valid_types (γ : impl_ctx) (Δ : type_ctx) : Prop :=
   ∀ f t, Δ !! f = Some t → ∃ i, γ !! f = Some i ∧
   ∀ vs e 𝕋, (
     subst_vals (params i) vs (body i) = Some e ∧
-    to_typing vs (own_ptr <$> (ty_in t)) = Some 𝕋
+    to_typing vs (own_val <$> (ty_in t)) = Some 𝕋
   ) →
-  ∃ v, ox_triple γ e [∗ 𝕋] [∗ [v ⊲ own_ptr (ty_out t)]] v.
+  ∃ v, ox_triple γ e [∗ 𝕋] [∗ [v ⊲ own_val (ty_out t)]] v.
 Definition ox_spec (Δ : type_ctx) (e : expr) (𝕋 𝕌 : list typing) (v : val) : Prop :=
   ∀ γ, valid_types γ Δ → ox_triple γ e [∗ 𝕋] [∗ 𝕌] v.
