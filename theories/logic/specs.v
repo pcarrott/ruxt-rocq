@@ -32,7 +32,7 @@ Inductive ux_rule : spec_ctx → hprop → expr → exit → hprop → Prop :=
 | R_Error : ∀ Γ,
   Γ ⊢ ⌈ emp ⌉ Error ⌈ Err ECrash, emp ⌉
 | R_Let : ∀ Γ x e1 e2 P Q R v ε,
-  Γ ⊢ ⌈ P ⌉ e1 ⌈ Ok v, R ⌉ → Γ ⊢ ⌈ R ⌉ e2⌊x//v⌋ ⌈ ε, Q ⌉ →
+  Γ ⊢ ⌈ P ⌉ e1 ⌈ Ok v, R ⌉ → Γ ⊢ ⌈ R ⌉ e2⌊v//x⌋ ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Let x e1 e2 ⌈ ε, Q ⌉
 | R_LetCut : ∀ Γ x e1 e2 P Q ξ,
   Γ ⊢ ⌈ P ⌉ e1 ⌈ Err ξ, Q ⌉ →
@@ -94,9 +94,9 @@ Inductive ux_env_rule : impl_ctx → spec_ctx → Prop :=
   γ ≺ₛ Γ → f ∉ dom γ →
   γ' = <[f := {(xs) e}]>γ → Γ' = <[f := []]>Γ →
   γ' ≺ₛ Γ'
-| R_Spec : ∀ γ Γ Γ' P Q ε f i vs,
-  γ ≺ₛ Γ → γ !! f = Some i →
-  Γ ⊢ ⌈ P ⌉ i⌊vs⌋ ⌈ ε , Q ⌉ →
+| R_Spec : ∀ γ Γ Γ' P Q ε f xs e vs,
+  γ ≺ₛ Γ → γ !! f = Some {(xs) e} →
+  Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ →
   Γ' = alter (cons [(vs) P | ε, Q]) f Γ →
   γ ≺ₛ Γ'
 where "γ ≺ₛ Γ" := (ux_env_rule γ Γ).
@@ -109,7 +109,7 @@ Definition ux_triple (γ : impl_ctx) (e : expr) (P Q : hprop) (ε : exit) : Prop
   ∀ h', Q h' → ∃ h, P h ∧ γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ ∧ ((∃ v, ε = Ok v) ∨ (∃ ξ, ε = Err ξ)).
 Definition valid_specs (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∀ vs P Q ε, [(vs) P | ε, Q] ∈ s →
-  ∃ i, γ !! f = Some i ∧ ux_triple γ (i⌊vs⌋) P Q ε.
+  ∃ xs e, γ !! f = Some {(xs) e} ∧ ux_triple γ (e⌊vs[//]xs⌋) P Q ε.
 Definition ux_spec (Γ : spec_ctx) (e : expr) (P Q : hprop) (ε : exit) : Prop :=
   ∀ γ, valid_specs γ Γ → ux_triple γ e P Q ε.
 
@@ -253,8 +253,8 @@ Proof.
     eexists. by split; first by eexists.
   + intros γ Hval h' HQ. subst.
     assert (Γ !! f = Some s ∧ [(vs) P | ε, Q] ∈ s) as [HΓsome Hspec] by done.
-    specialize (Hval _ _ HΓsome _ _ _ _ Hspec) as [i [Hγsome Hux]].
-    specialize (Hux _ HQ) as [h [HP [Hstep Hε]]].
+    specialize (Hval _ _ HΓsome _ _ _ _ Hspec) as [xs [e [Hγsome Hux]]].
+    specialize (Hux _  HQ) as [h [HP [Hstep Hε]]].
     eexists. split; first done. split; last done.
     by eapply O_Call.
 Qed.
@@ -267,8 +267,8 @@ Proof.
   + done.
   + intros f' s HΓsome vs P Q ε Hin.
     apply lookup_insert_Some in HΓsome as [[_ <-]|[? HΓsome]]; first inversion Hin.
-    specialize (IHrule _ _ HΓsome _ _ _ _ Hin) as [i [Hγsome Hux]].
-    eexists. split; first by rewrite (lookup_insert_ne γ).
+    specialize (IHrule _ _ HΓsome _ _ _ _ Hin) as [xs' [e' [Hγsome Hux]]].
+    do 2 eexists. split; first by rewrite (lookup_insert_ne γ).
     intros h' HQ. specialize (Hux _ HQ) as [h [HP [Hstep Hε]]].
     eexists. split; first done. split; last done.
     rewrite (insert_union_singleton_r γ); last by apply not_elem_of_dom.
@@ -277,8 +277,8 @@ Proof.
     by apply map_disjoint_singleton_r, not_elem_of_dom.
   + intros f' s HΓsome vs' P' Q' ε' Hin.
     apply lookup_alter_Some in HΓsome as [[<- [? [? ->]]]|[]]; last by eapply IHrule.
-    assert (Γ ⊢ ⌈ P ⌉ i⌊vs⌋ ⌈ ε, Q ⌉) as Hrule by done.
+    assert (Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉) as Hrule by done.
     specialize (ux_soundness _ _ _ _ _ Hrule _ IHrule); intros Hux.
     apply elem_of_cons in Hin as [Heq|]; last by eapply IHrule.
-    inversion Heq; subst. by eexists.
+    inversion Heq; subst. by do 2 eexists.
 Qed.

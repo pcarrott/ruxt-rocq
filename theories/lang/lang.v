@@ -212,12 +212,12 @@ Fixpoint subst_in_expr (x : string) (t : term) (e : expr) : expr :=
   end.
 Definition subst (x : binder) (v : val) (e : expr) : expr :=
   match x with BAnon => e | BNamed n => subst_in_expr n (TVal v) e end.
-Notation "e ⌊ x // v ⌋" := (subst x v e) (at level 50).
+Notation "e ⌊ v // x ⌋" := (subst x v e) (at level 50).
 (* Multiple substitutions *)
 Definition subst_terms (xs : list string) (ts : list term) (e : expr) : expr :=
   foldr (λ xt, subst_in_expr xt.1 xt.2) e (zip xs ts).
-Notation "e ⌊ xs [//] ts ⌋ₜ" := (subst_terms xs ts e) (at level 50).
-Notation "e ⌊ xs [//] vs ⌋" := (subst_terms xs (TVals vs) e) (at level 50).
+Notation "e ⌊ ts [//] xs ⌋ₜ" := (subst_terms xs ts e) (at level 50).
+Notation "e ⌊ vs [//] xs ⌋" := (subst_terms xs (TVals vs) e) (at level 50).
 
 
 (*** Closed expressions ***)

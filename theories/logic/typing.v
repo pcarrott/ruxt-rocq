@@ -21,7 +21,7 @@ Reserved Notation "Δ ∣ 𝕋 ⊢ e ⊣ v , 𝕌" (at level 50).
 Definition ox_triple (γ : impl_ctx) (e : expr) (P Q : hprop) (v : val) : Prop :=
   ∀ h, P h → ∀ h' ε, γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ → Q h' ∧ ε = Ok v.
 Definition valid_types (γ : impl_ctx) (Δ : type_ctx) : Prop :=
-  ∀ f τs τ, Δ !! f = Some {τs ↣ τ} → ∃ i, γ !! f = Some i ∧
-  ∀ vs, ∃ v, ox_triple γ (i⌊vs⌋) [∗ vs [⊲] own_vals τs] [∗ [v ⊲ own_val τ]] v.
+  ∀ f τs τ, Δ !! f = Some {τs ↣ τ} → ∃ xs e, γ !! f = Some {(xs) e} ∧
+  ∀ vs, ∃ v, ox_triple γ (e⌊vs[//]xs⌋) [∗ vs [⊲] own_vals τs] [∗ [v ⊲ own_val τ]] v.
 Definition ox_spec (Δ : type_ctx) (e : expr) (𝕋 𝕌 : list typing) (v : val) : Prop :=
   ∀ γ, valid_types γ Δ → ox_triple γ e [∗ 𝕋] [∗ 𝕌] v.

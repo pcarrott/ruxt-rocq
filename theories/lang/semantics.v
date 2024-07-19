@@ -7,8 +7,6 @@ From RUXt.lib Require Import gmap.
 (* Function implementations *)
 Record fun_impl := mk_fun_impl { params : list string; body : expr }.
 Notation "{ ( xs ) e }" := (mk_fun_impl xs e).
-Notation "i ⌊ ts ⌋ₜ" := ((body i) ⌊ (params i) [//] ts ⌋ₜ) (at level 50).
-Notation "i ⌊ vs ⌋" := ((body i) ⌊ (params i) [//] vs ⌋) (at level 50).
 Definition impl_ctx := gmap string fun_impl.
 (* Heaps *)
 Inductive heap_value := LangVal (v : val) | Poison | Freed.
@@ -98,13 +96,12 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Pure : ∀ γ p h v, 
   ⌊ p ⌋ₚ = Ok v →
   γ ⊢ ⟨ h | Pure p ⟩ ⇓ ⟨ h | Ok v ⟩
+| O_Assume : ∀ γ h,
+  γ ⊢ ⟨ h | Assume TTrue ⟩ ⇓ ⟨ h | Ok VUnit ⟩
 | O_Error : ∀ γ h, 
   γ ⊢ ⟨ h | Error ⟩ ⇓ ⟨ h | Err ECrash ⟩
-| O_Assume : ∀ γ t h,
-  ⌊ t ⌋ₜ = Ok (VBool true) →
-  γ ⊢ ⟨ h | Assume t ⟩ ⇓ ⟨ h | Ok VUnit ⟩
 | O_Let : ∀ γ x e1 e2 h h' h'' v ε,
-  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | e2⌊x//v⌋ ⟩ ⇓ ⟨ h' | ε ⟩ →
+  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | e2⌊v//x⌋ ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
 | O_LetErr : ∀ γ x e1 e2 h h' ξ,
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Err ξ ⟩ →
@@ -153,8 +150,8 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_LoadMiss : ∀ γ t h l,
   ⌊ t ⌋ₜ = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Call : ∀ γ f i ts h h' ε,
-  γ !! f = Some i → γ ⊢ ⟨ h | i⌊ts⌋ₜ ⟩ ⇓ ⟨ h' | ε ⟩ →
+| O_Call : ∀ γ f xs e ts h h' ε,
+  γ !! f = Some {(xs) e} → γ ⊢ ⟨ h | e⌊ts[//]xs⌋ₜ ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Call f ts ⟩ ⇓ ⟨ h' | ε ⟩
 | O_CallMiss : ∀ γ f ts h,
   γ !! f = None →
@@ -170,8 +167,8 @@ Proof.
   intros Hstep Hexit.
   induction Hstep; intros hF γF Hframe' Hγ.
   + split; last done. by apply O_Pure.
-  + split; last done. apply O_Error.
   + split; last done. by apply O_Assume.
+  + split; last done. by apply O_Error.
   + assert ((∃ v' : val, Ok v = Ok v') ∨ (∃ ξ : error, Ok v = Err ξ))
       as Hexists by (by left; eexists).
     specialize (IHHstep2 Hexit _ _ Hframe' Hγ) as [Hstep2F Hframe''].
@@ -187,7 +184,7 @@ Proof.
     split; last done. by apply O_Choice2.
   + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
     split; last done. by apply O_Loop.
-  + split; last done. apply O_LoopCut.
+  + split; last done. by apply O_LoopCut.
   + apply map_disjoint_insert_l in Hframe' as [HNone Hframe].
     rewrite <- (insert_union_l h).
     split; last done. apply O_Alloc.
@@ -196,29 +193,25 @@ Proof.
     rewrite <- (insert_union_l h).
     split; last done. eapply O_Free; try done.
     apply lookup_union_Some_raw; by left.
-  + split; last done. eapply O_FreeErr; first done.
+  + split; last done. eapply O_FreeErr; try done.
     apply lookup_union_Some_raw; by left.
-  + split; last done. apply O_FreeMiss; first done.
-    destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
+  + split; last done. destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
   + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
     rewrite <- (insert_union_l h).
     split; last done. eapply O_Store; try done.
     apply lookup_union_Some_raw; by left.
-  + split; last done. eapply O_StoreErr; first done.
+  + split; last done. eapply O_StoreErr; try done.
     apply lookup_union_Some_raw; by left.
-  + split; last done. apply O_StoreMiss; first done.
-    destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
-  + split; last done. eapply O_Load; first done.
+  + split; last done. destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
+  + split; last done. eapply O_Load; try done.
     apply lookup_union_Some_raw; by left.
   + split; last done. eapply O_LoadErr; try done.
     apply lookup_union_Some_raw; by left.
-  + split; last done. apply O_LoadMiss; first done.
-    destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
+  + split; last done. destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
   + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
     split; last done. eapply O_Call; try done.
     apply lookup_union_Some_raw; by left.
-  + split; last done. apply O_CallMiss; try done.
-    destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
+  + split; last done. destruct Hexit as [[? Hmiss]|[? Hmiss]]; inversion Hmiss.
 Qed.
 
 (* Over-approximate frame validity - frame subtraction *)
@@ -237,9 +230,9 @@ Proof.
   + eexists. split; first done.
     left. split; last done. by apply O_Pure.
   + eexists. split; first done.
-    left. split; last done. apply O_Error.
-  + eexists. split; first done.
     left. split; last done. by apply O_Assume.
+  + eexists. split; first done.
+    left. split; last done. by apply O_Error.
   + specialize (IHHstep1 _ _ _ _ Hheap Hframe Hfun Hγ) as [hs'' [Hframe'' Hstep1F]].
     destruct Hstep1F as [[Hstep1F Hheap'']|[ms [Hmiss Hdom]]].
     - specialize (IHHstep2 _ _ _ _ Hheap'' Hframe'' Hfun Hγ) as [hs' [Hframe' Hstep2F]].
@@ -275,7 +268,7 @@ Proof.
     - left. split; last done. by apply O_Loop.
     - right. eexists. split; last done. by apply O_Loop.
   + eexists. split; first done. left.
-    split; last done. apply O_LoopCut.
+    split; last done. by apply O_LoopCut.
   + eexists. split; first by subst; apply map_disjoint_union_insert. left.
     split; last by rewrite <- insert_union_l, Hheap. apply O_Alloc. set_solver.
   + subst; assert (_ !! l = Some _) as Hlookup by done.
@@ -327,8 +320,8 @@ Proof.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - eexists. split; first done.
       destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
-      * left. split; last done. eapply O_Call; try done.
-      * right. eexists. split; last done. eapply O_Call; try done.
+      * left. split; last done. by eapply O_Call.
+      * right. eexists. split; last done. by eapply O_Call.
     - exists hs. split; first done.
       right. eexists. split; first by eapply O_CallMiss.
       right. eexists. split; first done. by eapply map_union_dom; first eexists.
