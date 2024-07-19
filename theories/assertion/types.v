@@ -15,25 +15,13 @@ Record type := {
 Notation "⟦ τ '⟧(' vs )" := (ty_own τ vs).
 
 (* Type assignment *)
-Inductive typing := TyOwned (v : val) (τ : type).
-Notation "v ⊲ τ" := (TyOwned v τ) (at level 100).
-
-(* Assign types from lists *)
-Fixpoint to_typing (vs : list val) (τs : list type) : option (list typing) :=
-  match vs, τs with
-  | [], [] => Some []
-  | v :: vs, τ :: τs => cons (v ⊲ τ) <$> to_typing vs τs
-  | _, _ => None
-  end.
+Inductive typing := TyOwn (v : val) (τ : type).
+Notation "v ⊲ τ" := (TyOwn v τ) (at level 50).
+Notation "vs [⊲] τs" := (zip_with TyOwn vs τs) (at level 50).
 
 (* Type interpretation *)
 Definition own_type (t : typing) : hprop :=
   match t with
   | v ⊲ τ => ⟦τ⟧([v])
   end.
-Fixpoint interpret (𝕋 : list typing) : hprop :=
-  match 𝕋 with
-  | [] => emp
-  | t :: 𝕋 => own_type t ∗ interpret 𝕋
-  end.
-Notation "'[∗' 𝕋 ]" := (interpret 𝕋).
+Notation "'[∗' 𝕋 ]" := ([∗ 𝕋, own_type]).

@@ -11,8 +11,7 @@ Notation "[ ( vs ) P | ε , Q ]" := (mk_fun_spec vs P ε Q).
 Definition spec_ctx := gmap string (list fun_spec).
 
 (* Proof rules *)
-Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉"
-  (at level 100, no associativity).
+Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" (at level 50).
 Inductive ux_rule : spec_ctx → hprop → expr → exit → hprop → Prop :=
 | R_Value : ∀ Γ v,
   Γ ⊢ ⌈ emp ⌉ Pure (PVal v) ⌈ Ok v, emp ⌉
@@ -33,7 +32,7 @@ Inductive ux_rule : spec_ctx → hprop → expr → exit → hprop → Prop :=
 | R_Error : ∀ Γ,
   Γ ⊢ ⌈ emp ⌉ Error ⌈ Err ECrash, emp ⌉
 | R_Let : ∀ Γ x e1 e2 P Q R v ε,
-  Γ ⊢ ⌈ P ⌉ e1 ⌈ Ok v, R ⌉ → Γ ⊢ ⌈ R ⌉ subst x v e2 ⌈ ε, Q ⌉ →
+  Γ ⊢ ⌈ P ⌉ e1 ⌈ Ok v, R ⌉ → Γ ⊢ ⌈ R ⌉ e2⌊x//v⌋ ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Let x e1 e2 ⌈ ε, Q ⌉
 | R_LetCut : ∀ Γ x e1 e2 P Q ξ,
   Γ ⊢ ⌈ P ⌉ e1 ⌈ Err ξ, Q ⌉ →
@@ -81,25 +80,23 @@ Inductive ux_rule : spec_ctx → hprop → expr → exit → hprop → Prop :=
 | R_Exist : ∀ Γ e P Q ε X,
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ ∃∃ x ⋮ X, P ⌉ e ⌈ ε, ∃∃ x ⋮ X, Q ⌉
-| R_Call : ∀ Γ f ts vs P Q ε specs,
-  Γ !! f = Some specs → [(vs) P | ε, Q] ∈ specs → ts = Vals vs →
+| R_Call : ∀ Γ f ts vs P Q ε s,
+  Γ !! f = Some s → [(vs) P | ε, Q] ∈ s → ts = TVals vs →
   Γ ⊢ ⌈ P ⌉ Call f ts ⌈ ε , Q ⌉
 where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (ux_rule Γ P e ε Q).
 
 (* Environment validity *)
-Reserved Notation "γ ≺ₛ Γ"
-  (at level 100, no associativity).
+Reserved Notation "γ ≺ₛ Γ" (at level 50).
 Inductive ux_env_rule : impl_ctx → spec_ctx → Prop :=
 | R_Empty :
   ∅ ≺ₛ ∅
 | R_Imp : ∀ γ γ' Γ Γ' f xs e,
-  (γ ≺ₛ Γ) →
-  f ∉ dom γ → γ' = <[f := {(xs) e}]>γ →
-  Γ' = <[f := []]>Γ →
+  γ ≺ₛ Γ → f ∉ dom γ →
+  γ' = <[f := {(xs) e}]>γ → Γ' = <[f := []]>Γ →
   γ' ≺ₛ Γ'
-| R_Spec : ∀ γ Γ Γ' P Q ε f i e vs,
-  (γ ≺ₛ Γ) → Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ →
-  γ !! f = Some i → subst_vals (params i) vs (body i) = Some e →
+| R_Spec : ∀ γ Γ Γ' P Q ε f i vs,
+  γ ≺ₛ Γ → γ !! f = Some i →
+  Γ ⊢ ⌈ P ⌉ i⌊vs⌋ ⌈ ε , Q ⌉ →
   Γ' = alter (cons [(vs) P | ε, Q]) f Γ →
   γ ≺ₛ Γ'
 where "γ ≺ₛ Γ" := (ux_env_rule γ Γ).
@@ -109,11 +106,10 @@ where "γ ≺ₛ Γ" := (ux_env_rule γ Γ).
 
 (* UX rule definition *)
 Definition ux_triple (γ : impl_ctx) (e : expr) (P Q : hprop) (ε : exit) : Prop :=
-  ∀ h', Q h' → ∃ h, P h ∧ (γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩) ∧ ((∃ v, ε = Ok v) ∨ (∃ ξ, ε = Err ξ)).
+  ∀ h', Q h' → ∃ h, P h ∧ γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ ∧ ((∃ v, ε = Ok v) ∨ (∃ ξ, ε = Err ξ)).
 Definition valid_specs (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
-  ∀ f S, Γ !! f = Some S → ∀ s, s ∈ S → ∃ i e, γ !! f = Some i ∧
-  subst_vals (params i) (vals s) (body i) = Some e ∧
-  ux_triple γ e (pre s) (post s) (tag s).
+  ∀ f s, Γ !! f = Some s → ∀ vs P Q ε, [(vs) P | ε, Q] ∈ s →
+  ∃ i, γ !! f = Some i ∧ ux_triple γ (i⌊vs⌋) P Q ε.
 Definition ux_spec (Γ : spec_ctx) (e : expr) (P Q : hprop) (ε : exit) : Prop :=
   ∀ γ, valid_specs γ Γ → ux_triple γ e P Q ε.
 
@@ -121,8 +117,8 @@ Definition ux_spec (Γ : spec_ctx) (e : expr) (P Q : hprop) (ε : exit) : Prop :
 Lemma env_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
   valid_specs γ Γ → Γ' ⊆ Γ → valid_specs γ Γ'.
 Proof.
-  intros Hval Hsub f S Hsome' s Hin. rewrite (map_subseteq_spec Γ') in Hsub.
-  specialize (Hsub _ _ Hsome') as Hsome. by specialize (Hval _ _ Hsome _ Hin).
+  intros Hval Hsub f s Hsome' vs P Q ε Hin. rewrite (map_subseteq_spec Γ') in Hsub.
+  specialize (Hsub _ _ Hsome') as Hsome. by specialize (Hval _ _ Hsome _ _ _ _ Hin).
 Qed.
 
 (* Soundness of proof rules *)
@@ -256,8 +252,8 @@ Proof.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
     eexists. by split; first by eexists.
   + intros γ Hval h' HQ. subst.
-    assert (Γ !! f = Some specs ∧ [ (vs) P | ε, Q] ∈ specs) as [HΓsome Hspec] by done.
-    specialize (Hval _ _ HΓsome _ Hspec) as [i [e [Hγsome [Hsubst Hux]]]].
+    assert (Γ !! f = Some s ∧ [(vs) P | ε, Q] ∈ s) as [HΓsome Hspec] by done.
+    specialize (Hval _ _ HΓsome _ _ _ _ Hspec) as [i [Hγsome Hux]].
     specialize (Hux _ HQ) as [h [HP [Hstep Hε]]].
     eexists. split; first done. split; last done.
     by eapply O_Call.
@@ -265,23 +261,24 @@ Qed.
 
 (* Soundness of environment validity *)
 Theorem env_soundness γ Γ :
-  (γ ≺ₛ Γ) → valid_specs γ Γ.
+  γ ≺ₛ Γ → valid_specs γ Γ.
 Proof.
   intros rule; induction rule; subst.
   + done.
-  + intros f' S HΓsome s Hin.
+  + intros f' s HΓsome vs P Q ε Hin.
     apply lookup_insert_Some in HΓsome as [[_ <-]|[? HΓsome]]; first inversion Hin.
-    specialize (IHrule _ _ HΓsome _ Hin) as [i [es [Hγsome [Hsubst Hux]]]].
-    do 2 eexists. split; first by rewrite (lookup_insert_ne γ). split; first done.
+    specialize (IHrule _ _ HΓsome _ _ _ _ Hin) as [i [Hγsome Hux]].
+    eexists. split; first by rewrite (lookup_insert_ne γ).
     intros h' HQ. specialize (Hux _ HQ) as [h [HP [Hstep Hε]]].
     eexists. split; first done. split; last done.
     rewrite (insert_union_singleton_r γ); last by apply not_elem_of_dom.
     rewrite <- (map_union_empty h), <- (map_union_empty h').
     apply ux_frame; try done; first apply map_disjoint_empty_r.
     by apply map_disjoint_singleton_r, not_elem_of_dom.
-  + intros f' specs HΓsome s Hin.
+  + intros f' s HΓsome vs' P' Q' ε' Hin.
     apply lookup_alter_Some in HΓsome as [[<- [? [? ->]]]|[]]; last by eapply IHrule.
-    assert (Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉) as Hrule by done.
+    assert (Γ ⊢ ⌈ P ⌉ i⌊vs⌋ ⌈ ε, Q ⌉) as Hrule by done.
     specialize (ux_soundness _ _ _ _ _ Hrule _ IHrule); intros Hux.
-    apply elem_of_cons in Hin as [->|]; last by eapply IHrule. by do 2 eexists.
+    apply elem_of_cons in Hin as [Heq|]; last by eapply IHrule.
+    inversion Heq; subst. by eexists.
 Qed.

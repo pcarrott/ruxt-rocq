@@ -25,3 +25,4 @@ Next Obligation.
 Qed.
 
 Definition own_val τ := own (Some τ).
+Notation own_vals τs := (own_val <$> τs).

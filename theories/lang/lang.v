@@ -12,7 +12,7 @@ Definition loc : Set := block * Z.
 (* Language values *)
 Inductive val := VInt (z : Z) | VBool (b : bool) | VLoc (l : loc) | VUnit.
 (* Language terms *)
-Inductive term := Var (x : string) | Val (v : val).
+Inductive term := TVar (x : string) | TVal (v : val).
 (* Unary operations *)
 Inductive un_op := NegOp | NotOp.
 (* Binary operations *)
@@ -37,14 +37,14 @@ Inductive expr :=
 | Call (f : string) (ts : list term).
 
 (* Syntactic sugar *)
-Notation Vals vs := (Val <$> vs).
-Notation PVal v := (Term (Val v)). Notation PVar x := (Term (Var x)).
-Notation TInt z := (Val (VInt z)). Notation PInt z := (Term (TInt z)).
-Notation TBool b := (Val (VBool b)). Notation PBool b := (Term (TBool b)).
+Notation TVals vs := (TVal <$> vs).
+Notation PVal v := (Term (TVal v)). Notation PVar x := (Term (TVar x)).
+Notation TInt z := (TVal (VInt z)). Notation PInt z := (Term (TInt z)).
+Notation TBool b := (TVal (VBool b)). Notation PBool b := (Term (TBool b)).
 Notation TTrue := (TBool true). Notation PTrue := (Term TTrue).
 Notation TFalse := (TBool false). Notation PFalse := (Term TFalse).
-Notation TLoc l := (Val (VLoc l)). Notation PLoc l := (Term (TLoc l)).
-Notation TUnit := (Val VUnit). Notation PUnit := (Term TUnit).
+Notation TLoc l := (TVal (VLoc l)). Notation PLoc l := (Term (TLoc l)).
+Notation TUnit := (TVal VUnit). Notation PUnit := (Term TUnit).
 Notation PNeg p := (UnOp NegOp p). Notation PNot p := (UnOp NotOp p).
 Notation PPlus p1 p2 := (BinOp PlusOp p1 p2). Notation PEq p1 p2 := (BinOp EqOp p1 p2).
 
@@ -79,8 +79,8 @@ Proof.
 Qed.
 Global Instance term_countable : Countable term.
 Proof.
-  refine (inj_countable' (λ t, match t with Var x => inl x | Val v => inr v end)
-  (λ s, match s with inl x => Var x | inr v => Val v end) _); by intros [].
+  refine (inj_countable' (λ t, match t with TVar x => inl x | TVal v => inr v end)
+  (λ s, match s with inl x => TVar x | inr v => TVal v end) _); by intros [].
 Qed.
 Global Instance un_op_countable : Countable un_op.
 Proof.
@@ -108,7 +108,7 @@ Proof.
       | GenLeaf (inl t) => Term t
       | GenNode 0 [GenLeaf (inr (inl op)); p] => UnOp op (go p)
       | GenNode 1 [GenLeaf (inr (inr op)); p1; p2] => BinOp op (go p1) (go p2)
-      | _ => Term (Val VUnit) (* dummy *)
+      | _ => Term (TVal VUnit) (* dummy *)
       end).
   refine (inj_countable' enc dec _).
   refine (fix go (p : pure) {struct p} := _ with gov (v : val) {struct v} := _ for go).
@@ -123,7 +123,7 @@ Proof. Admitted.
 
 (* Variables *)
 Definition eval_term (t : term) : option val :=
-  match t with Val v => Some v | Var _ => None end.
+  match t with TVal v => Some v | TVar _ => None end.
 (* Unary operations *)
 Definition eval_un_op (op : un_op) (v : val) : option val :=
   match op, v with
@@ -148,6 +148,7 @@ Fixpoint eval_pure (p : pure) : option val :=
                       | _, _ => None
                       end
   end.
+
 (* Properties *)
 Lemma pure_neg_Some p z :
   eval_pure p = Some (VInt z) → eval_pure (PNeg p) = Some (VInt (-z)).
@@ -184,55 +185,46 @@ Qed.
 (*** Substitution ***)
 
 (* Variables *)
-Definition subst_in_term (x : string) (v : val) (t : term) : term :=
-  if decide (t = Var x) then Val v else t.
+Definition subst_in_term (x : string) (t : term) (T : term) : term :=
+  if decide (T = TVar x) then t else T.
 (* Pure expressions *)
-Fixpoint subst_in_pure (x : string) (v : val) (p : pure) : pure :=
+Fixpoint subst_in_pure (x : string) (t : term) (p : pure) : pure :=
   match p with
-  | Term t => Term (subst_in_term x v t)
-  | UnOp op p => UnOp op (subst_in_pure x v p)
-  | BinOp op p1 p2 => BinOp op (subst_in_pure x v p1) (subst_in_pure x v p2)
+  | Term T => Term (subst_in_term x t T)
+  | UnOp op p => UnOp op (subst_in_pure x t p)
+  | BinOp op p1 p2 => BinOp op (subst_in_pure x t p1) (subst_in_pure x t p2)
   end.
 (* Program expressions *)
-Fixpoint subst_in_expr (x : string) (v : val) (e : expr) : expr :=
+Fixpoint subst_in_expr (x : string) (t : term) (e : expr) : expr :=
   match e with
-  | Pure p => Pure (subst_in_pure x v p)
+  | Pure p => Pure (subst_in_pure x t p)
   | Error => Error
-  | Assume t => Assume (subst_in_term x v t)
-  | Let bx e1 e2 => Let bx (subst_in_expr x v e1)
-                  (if decide (bx = BNamed x) then e2 else subst_in_expr x v e2)
-  | Choice e1 e2 => Choice (subst_in_expr x v e1) (subst_in_expr x v e2)
-  | Loop e => Loop (subst_in_expr x v e)
+  | Assume T => Assume (subst_in_term x t T)
+  | Let bx e1 e2 => Let bx (subst_in_expr x t e1)
+                  (if decide (bx = BNamed x) then e2 else subst_in_expr x t e2)
+  | Choice e1 e2 => Choice (subst_in_expr x t e1) (subst_in_expr x t e2)
+  | Loop e => Loop (subst_in_expr x t e)
   | Alloc => Alloc
-  | Free t => Free (subst_in_term x v t)
-  | Store t1 t2 => Store (subst_in_term x v t1) (subst_in_term x v t2)
-  | Load t => Load (subst_in_term x v t)
-  | Call f ts => Call f (subst_in_term x v <$> ts)
+  | Free T => Free (subst_in_term x t T)
+  | Store T1 T2 => Store (subst_in_term x t T1) (subst_in_term x t T2)
+  | Load T => Load (subst_in_term x t T)
+  | Call f Ts => Call f (subst_in_term x t <$> Ts)
   end.
-(* Anonymous substitutions *)
 Definition subst (x : binder) (v : val) (e : expr) : expr :=
-  match x with BAnon => e | BNamed n => subst_in_expr n v e end.
-(* Multiple term substitutions *)
-Fixpoint subst_terms (xs : list string) (ts : list term) (e : expr) : option expr :=
-  match xs, ts with
-  | [], [] => Some e
-  | x :: xs, t :: ts => 
-    match eval_term t with
-    | Some v => (subst_in_expr x v) <$> subst_terms xs ts e
-    | _ => None
-    end
-  | _, _ => None
-  end.
-(* Multiple value substitutions *)
-Definition subst_vals (xs : list string) (vs : list val) (e : expr) : option expr :=
-  subst_terms xs (Vals vs) e.
+  match x with BAnon => e | BNamed n => subst_in_expr n (TVal v) e end.
+Notation "e ⌊ x // v ⌋" := (subst x v e) (at level 50).
+(* Multiple substitutions *)
+Definition subst_terms (xs : list string) (ts : list term) (e : expr) : expr :=
+  foldr (λ xt, subst_in_expr xt.1 xt.2) e (zip xs ts).
+Notation "e ⌊ xs [//] ts ⌋ₜ" := (subst_terms xs ts e) (at level 50).
+Notation "e ⌊ xs [//] vs ⌋" := (subst_terms xs (TVals vs) e) (at level 50).
 
 
 (*** Closed expressions ***)
 
 (* Terms *)
 Definition closed_term' (X : list string) (t : term) : Prop :=
-  match t with Var x => x ∈ X | Val _ => True end.
+  match t with TVar x => x ∈ X | TVal _ => True end.
 Definition closed_term (t : term) : Prop := closed_term' [] t.
 (* Pure expressions  *)
 Fixpoint closed_pure' (X : list string) (p : pure) : Prop :=
