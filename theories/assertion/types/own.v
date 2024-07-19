@@ -1,5 +1,5 @@
-From RUXt.assertion Require Export types.
 From RUXt.lib Require Import gmap.
+From RUXt.assertion Require Export types.
 
 
 Program Definition own (τ : option type) : type := {|

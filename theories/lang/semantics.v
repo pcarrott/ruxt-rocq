@@ -1,5 +1,5 @@
-From RUXt.lang Require Import lang.
 From RUXt.lib Require Import gmap.
+From RUXt.lang Require Export lang.
 
 
 (* Program context *)

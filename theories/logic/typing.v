@@ -1,7 +1,8 @@
+From RUXt.lib Require Import gmap.
+From RUXt.lang Require Export lang.
 From RUXt.lang Require Import semantics.
 From RUXt.assertion Require Export hprop.
 From RUXt.assertion.types Require Import own.
-From RUXt.lib Require Import gmap.
 
 
 (*** Over-approximate specifications ***)

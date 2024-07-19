@@ -1,6 +1,6 @@
+From RUXt.lib Require Import gmap.
 From RUXt.lang Require Export lang.
 From RUXt.lang Require Import semantics.
-From RUXt.lib Require Import gmap.
 
 
 (*** Assertion language ***)

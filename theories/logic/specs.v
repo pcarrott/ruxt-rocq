@@ -1,13 +1,14 @@
+From RUXt.lib Require Import gmap.
+From RUXt.lang Require Export lang.
 From RUXt.lang Require Import semantics.
 From RUXt.assertion Require Export hprop.
-From RUXt.lib Require Export gmap.
 
 
 (*** Under-approximate specifications ***)
 
 (* Function specifications *)
 Record fun_spec := mk_fun_spec { vals : list val; pre : hprop; tag : exit; post : hprop }.
-Notation "[ ( vs ) P | ε , Q ]" := (mk_fun_spec vs P ε Q).
+Notation "⌈ ( vs ) P | ε , Q ⌉" := (mk_fun_spec vs P ε Q).
 Definition spec_ctx := gmap string (list fun_spec).
 
 (* Proof rules *)
@@ -81,7 +82,7 @@ Inductive ux_rule : spec_ctx → hprop → expr → exit → hprop → Prop :=
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ ∃∃ x ⋮ X, P ⌉ e ⌈ ε, ∃∃ x ⋮ X, Q ⌉
 | R_Call : ∀ Γ f ts vs P Q ε s,
-  Γ !! f = Some s → [(vs) P | ε, Q] ∈ s → ts = TVals vs →
+  Γ !! f = Some s → ⌈(vs) P | ε, Q⌉ ∈ s → ts = TVals vs →
   Γ ⊢ ⌈ P ⌉ Call f ts ⌈ ε , Q ⌉
 where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (ux_rule Γ P e ε Q).
 
@@ -97,7 +98,7 @@ Inductive ux_env_rule : impl_ctx → spec_ctx → Prop :=
 | R_Spec : ∀ γ Γ Γ' P Q ε f xs e vs,
   γ ≺ₛ Γ → γ !! f = Some {(xs) e} →
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ →
-  Γ' = alter (cons [(vs) P | ε, Q]) f Γ →
+  Γ' = alter (cons ⌈(vs) P | ε, Q⌉) f Γ →
   γ ≺ₛ Γ'
 where "γ ≺ₛ Γ" := (ux_env_rule γ Γ).
 
@@ -108,7 +109,7 @@ where "γ ≺ₛ Γ" := (ux_env_rule γ Γ).
 Definition ux_triple (γ : impl_ctx) (e : expr) (P Q : hprop) (ε : exit) : Prop :=
   ∀ h', Q h' → ∃ h, P h ∧ γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ ∧ ((∃ v, ε = Ok v) ∨ (∃ ξ, ε = Err ξ)).
 Definition valid_specs (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
-  ∀ f s, Γ !! f = Some s → ∀ vs P Q ε, [(vs) P | ε, Q] ∈ s →
+  ∀ f s, Γ !! f = Some s → ∀ vs P Q ε, ⌈(vs) P | ε, Q⌉ ∈ s →
   ∃ xs e, γ !! f = Some {(xs) e} ∧ ux_triple γ (e⌊vs[//]xs⌋) P Q ε.
 Definition ux_spec (Γ : spec_ctx) (e : expr) (P Q : hprop) (ε : exit) : Prop :=
   ∀ γ, valid_specs γ Γ → ux_triple γ e P Q ε.
@@ -252,7 +253,7 @@ Proof.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
     eexists. by split; first by eexists.
   + intros γ Hval h' HQ. subst.
-    assert (Γ !! f = Some s ∧ [(vs) P | ε, Q] ∈ s) as [HΓsome Hspec] by done.
+    assert (Γ !! f = Some s ∧ ⌈(vs) P | ε, Q⌉ ∈ s) as [HΓsome Hspec] by done.
     specialize (Hval _ _ HΓsome _ _ _ _ Hspec) as [xs [e [Hγsome Hux]]].
     specialize (Hux _  HQ) as [h [HP [Hstep Hε]]].
     eexists. split; first done. split; last done.
