@@ -24,5 +24,6 @@ Next Obligation.
   all: split; first done; subst; apply map_empty_subseteq.
 Qed.
 
+Definition uninit := own None.
 Definition own_val τ := own (Some τ).
 Notation own_vals τs := (own_val <$> τs).

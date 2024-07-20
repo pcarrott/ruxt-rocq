@@ -15,79 +15,77 @@ Definition spec_ctx_subseteq (Γ Γ' : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆ s'.
 Notation "Γ [⊆] Γ'" := (spec_ctx_subseteq Γ Γ') (at level 50).
 
-(* UX rule definition *)
-
 (* Proof rules *)
 Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" (at level 50).
 Inductive ux_rule : spec_ctx → hprop → expr → exit → hprop → Prop :=
-| R_Value : ∀ Γ v,
+| S_Value : ∀ Γ v,
   Γ ⊢ ⌈ emp ⌉ Pure (PVal v) ⌈ Ok v, emp ⌉
-| R_Neg : ∀ Γ p z,
+| S_Neg : ∀ Γ p z,
   Γ ⊢ ⌈ emp ⌉ Pure p ⌈ Ok (VInt z), emp ⌉ →
   Γ ⊢ ⌈ emp ⌉ Pure (PNeg p) ⌈ Ok (VInt (-z)), emp ⌉
-| R_Not : ∀ Γ p b,
+| S_Not : ∀ Γ p b,
   Γ ⊢ ⌈ emp ⌉ Pure p ⌈ Ok (VBool b), emp ⌉ →
   Γ ⊢ ⌈ emp ⌉ Pure (PNot p) ⌈ Ok (VBool (negb b)), emp ⌉
-| R_Plus : ∀ Γ p1 p2 z1 z2,
+| S_Plus : ∀ Γ p1 p2 z1 z2,
   Γ ⊢ ⌈ emp ⌉ Pure p1 ⌈ Ok (VInt z1), emp ⌉ → Γ ⊢ ⌈ emp ⌉ Pure p2 ⌈ Ok (VInt z2), emp ⌉ →
   Γ ⊢ ⌈ emp ⌉ Pure (PPlus p1 p2) ⌈ Ok (VInt (z1 + z2)), emp ⌉
-| R_Eq : ∀ Γ p1 p2 z1 z2,
+| S_Eq : ∀ Γ p1 p2 z1 z2,
   Γ ⊢ ⌈ emp ⌉ Pure p1 ⌈ Ok (VInt z1), emp ⌉ → Γ ⊢ ⌈ emp ⌉ Pure p2 ⌈ Ok (VInt z2), emp ⌉ →
   Γ ⊢ ⌈ emp ⌉ Pure (PEq p1 p2) ⌈ Ok (VBool (Z.eqb z1 z2)), emp ⌉
-| R_Assume : ∀ Γ,
+| S_Assume : ∀ Γ,
   Γ ⊢ ⌈ emp ⌉ Assume TTrue ⌈ Ok VUnit, emp ⌉
-| R_Error : ∀ Γ,
+| S_Error : ∀ Γ,
   Γ ⊢ ⌈ emp ⌉ Error ⌈ Err ECrash, emp ⌉
-| R_Let : ∀ Γ x e1 e2 P Q R v ε,
+| S_Let : ∀ Γ x e1 e2 P Q R v ε,
   Γ ⊢ ⌈ P ⌉ e1 ⌈ Ok v, R ⌉ → Γ ⊢ ⌈ R ⌉ e2⌊v//x⌋ ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Let x e1 e2 ⌈ ε, Q ⌉
-| R_LetCut : ∀ Γ x e1 e2 P Q ξ,
+| S_LetCut : ∀ Γ x e1 e2 P Q ξ,
   Γ ⊢ ⌈ P ⌉ e1 ⌈ Err ξ, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Let x e1 e2 ⌈ Err ξ, Q ⌉
-| R_Choice1 : ∀ Γ e1 e2 P Q ε,
+| S_Choice1 : ∀ Γ e1 e2 P Q ε,
   Γ ⊢ ⌈ P ⌉ e1 ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Choice e1 e2 ⌈ ε, Q ⌉
-| R_Choice2 : ∀ Γ e1 e2 P Q ε,
+| S_Choice2 : ∀ Γ e1 e2 P Q ε,
   Γ ⊢ ⌈ P ⌉ e2 ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Choice e1 e2 ⌈ ε, Q ⌉
-| R_Loop : ∀ Γ e P Q ε,
+| S_Loop : ∀ Γ e P Q ε,
   Γ ⊢ ⌈ P ⌉ Let BAnon e (Loop e) ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Loop e ⌈ ε, Q ⌉
-| R_LoopCut : ∀ Γ e P,
+| S_LoopCut : ∀ Γ e P,
   Γ ⊢ ⌈ P ⌉ Loop e ⌈ Ok VUnit, P ⌉
-| R_Alloc : ∀ Γ l,
+| S_Alloc : ∀ Γ l,
   Γ ⊢ ⌈ emp ⌉ Alloc ⌈ Ok (VLoc l), PLoc l ↦? ⌉
-| R_Free : ∀ Γ t v,
+| S_Free : ∀ Γ t v,
   Γ ⊢ ⌈ Term t ↦ PVal v ⌉ Free t ⌈ Ok VUnit, Term t ↦∅ ⌉
-| R_FreeUninit : ∀ Γ t,
+| S_FreeUninit : ∀ Γ t,
   Γ ⊢ ⌈ Term t ↦? ⌉ Free t ⌈ Ok VUnit, Term t ↦∅ ⌉
-| R_FreeFreed : ∀ Γ t,
+| S_FreeFreed : ∀ Γ t,
   Γ ⊢ ⌈ Term t ↦∅ ⌉ Free t ⌈ Err ECrash, Term t ↦∅ ⌉
-| R_Store : ∀ Γ t1 t2 v,
+| S_Store : ∀ Γ t1 t2 v,
   Γ ⊢ ⌈ Term t1 ↦ PVal v ⌉ Store t1 t2 ⌈ Ok VUnit, Term t1 ↦ Term t2 ⌉
-| R_StoreUninit : ∀ Γ t1 t2,
+| S_StoreUninit : ∀ Γ t1 t2,
   Γ ⊢ ⌈ Term t1 ↦? ⌉ Store t1 t2 ⌈ Ok VUnit, Term t1 ↦ Term t2 ⌉
-| R_StoreFreed : ∀ Γ t1 t2,
+| S_StoreFreed : ∀ Γ t1 t2,
   Γ ⊢ ⌈ Term t1 ↦∅ ⌉ Store t1 t2 ⌈ Err ECrash, Term t1 ↦∅ ⌉
-| R_Load : ∀ Γ t v,
+| S_Load : ∀ Γ t v,
   Γ ⊢ ⌈ Term t ↦ PVal v ⌉ Load t ⌈ Ok v, Term t ↦ PVal v ⌉
-| R_LoadUninit : ∀ Γ t,
+| S_LoadUninit : ∀ Γ t,
   Γ ⊢ ⌈ Term t ↦? ⌉ Load t ⌈ Err ECrash, Term t ↦? ⌉
-| R_LoadFreed : ∀ Γ t,
+| S_LoadFreed : ∀ Γ t,
   Γ ⊢ ⌈ Term t ↦∅ ⌉ Load t ⌈ Err ECrash, Term t ↦∅ ⌉
-| R_Frame : ∀  Γ e P Q R ε,
+| S_Frame : ∀  Γ e P Q R ε,
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ∗ R ⌉ e ⌈ ε, Q ∗ R ⌉
-| R_Disj : ∀ Γ e P1 P2 Q1 Q2 ε,
+| S_Disj : ∀ Γ e P1 P2 Q1 Q2 ε,
   Γ ⊢ ⌈ P1 ⌉ e ⌈ ε, Q1 ⌉ → Γ ⊢ ⌈ P2 ⌉ e ⌈ ε, Q2 ⌉ →
   Γ ⊢ ⌈ P1 ∨∨ P2 ⌉ e ⌈ ε, Q1 ∨∨ Q2 ⌉
-| R_Cons : ∀ Γ Γ' e P P' Q Q' ε,
+| S_Cons : ∀ Γ Γ' e P P' Q Q' ε,
   Γ' [⊆] Γ → (⊢ (P' ⇒ P)) → (⊢ (Q ⇒ Q')) → Γ' ⊢ ⌈ P' ⌉ e ⌈ ε , Q' ⌉ →
   Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉
-| R_Exist : ∀ Γ e P Q ε X,
+| S_Exist : ∀ Γ e P Q ε X,
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ ∃∃ x ⋮ X, P ⌉ e ⌈ ε, ∃∃ x ⋮ X, Q ⌉
-| R_Call : ∀ Γ f ts vs P Q ε s,
+| S_Call : ∀ Γ f ts vs P Q ε s,
   Γ !! f = Some s → ⌈(vs) P | ε, Q⌉ ∈ s → ts = TVals vs →
   Γ ⊢ ⌈ P ⌉ Call f ts ⌈ ε , Q ⌉
 where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (ux_rule Γ P e ε Q).
@@ -95,13 +93,13 @@ where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (ux_rule Γ P e ε Q).
 (* Environment validity *)
 Reserved Notation "γ ≺ₛ Γ" (at level 50).
 Inductive ux_env_rule : impl_ctx → spec_ctx → Prop :=
-| R_Empty :
+| S_Empty :
   ∅ ≺ₛ ∅
-| R_Imp : ∀ γ γ' Γ Γ' f xs e,
+| S_Imp : ∀ γ γ' Γ Γ' f xs e,
   γ ≺ₛ Γ → f ∉ dom γ →
   γ' = <[f := {(xs) e}]>γ → Γ' = <[f := []]>Γ →
   γ' ≺ₛ Γ'
-| R_Spec : ∀ γ Γ Γ' P Q ε f xs e vs,
+| S_Spec : ∀ γ Γ Γ' P Q ε f xs e vs,
   γ ≺ₛ Γ → γ !! f = Some {(xs) e} →
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ →
   Γ' = alter (cons ⌈(vs) P | ε, Q⌉) f Γ →
