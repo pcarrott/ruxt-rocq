@@ -134,7 +134,7 @@ Qed.
 Lemma env_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
   valid_specs γ Γ → Γ' [⊆] Γ → valid_specs γ Γ'.
 Proof.
-  intros Hval Hsub f s' Hsome' vs P Q ε Hin'. unfold spec_ctx_subseteq in Hsub.
+  intros Hval Hsub f s' Hsome' vs P Q ε Hin'.
   specialize (Hsub _ _ Hsome') as [s [Hsome Hsub]].
   by eapply Hval; last by apply Hsub.
 Qed.

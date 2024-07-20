@@ -46,31 +46,26 @@ Qed.
 Theorem type_ctx_validity γ Γ Δ f xs e τs τ vs P Q ε :
   (* Function f exists in context γ with params xs and body e *)
   γ !! f = Some {(xs) e} →
-  (* Function f is declared with input types τs and output type τ *)
+  (* Function f is declared in context Δ with input types τs and output type τ *)
   Δ !! f = Some {τs ↣ τ} →
   (* Derived UX specs Γ are valid wrt implementation context γ *)
   γ ≺ₛ Γ →
-  (* Post (ε, Q) is derived from pre (P) by replacing 
-     occurrences of xs in e with concrete values vs *)
+  (* Under context Γ, post (ε, Q) is derived from pre (P) by
+     replacing occurrences of xs in e with concrete values vs *)
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉ → 
   (* Pre (P) implies that values vs are of input type τs *)
   ⊢ (P ⇒ [∗ vs [⊲] own_vals τs]) →
-  (* Then, assuming that the function implementations γ
-     are valid wrt the declared function types Δ, ... *)
+  (* Then, assuming that the declared function types Δ
+     are valid wrt the function implementations γ, ... *)
   valid_types γ Δ →
   (* ... the derived post (Q) implies that output value v is of type τ
      and executing the call does not terminate in an error *)
   ⊢ (Q ⇒ ∃∃ v, (⌜ ε = Ok v ⌝ ∗ [∗ [v ⊲ own_val τ]])).
 Proof.
   intros HFimpl HFtype HenvS Hrule HPtype.
-  (* Add the new spec to the context *)
-  eapply R_Spec, env_soundness in HenvS as Hspecs; try done.
-  (* Update the rule with the new context *)
-  eapply R_Cons, ux_soundness in Hrule as Hux; first last.
-  { by intros ??. }
-  { by intros ??. }
-  { by apply spec_ctx_subseteq_alter. }
   (* Obtain the UX triple *)
+  apply env_soundness in HenvS as Hspecs.
+  apply ux_soundness in Hrule as Hux.
   specialize (Hux _ Hspecs).
   (* Assume type validity and obtain the OX triple *)
   intros HenvT. apply HenvT in HFtype as [? [? [HFimpl' Hox]]].
