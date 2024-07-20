@@ -1,3 +1,4 @@
+From RUXt.lib Require Import gmap.
 From RUXt.lang Require Import semantics.
 From RUXt.logic Require Export specs.
 From RUXt.logic Require Export typing.
@@ -8,35 +9,73 @@ From RUXt.logic Require Export typing.
 (* Reasoning principles for triples *)
 Theorem principle_of_agreement γ e Pₒₓ Qₒₓ v Pᵤₓ Qᵤₓ ε :
   ux_triple γ e Pᵤₓ Qᵤₓ ε →
-  (⊢ (Pᵤₓ ⇒ Pₒₓ)) →
+  ⊢ (Pᵤₓ ⇒ Pₒₓ) →
   ox_triple γ e Pₒₓ Qₒₓ v →
-  (⊢ (Qᵤₓ ⇒ Qₒₓ)) ∧ (Qᵤₓ ⊢ ⌜ ε = Ok v ⌝).
+  ⊢ (Qᵤₓ ⇒ (⌜ ε = Ok v ⌝ ∗ Qₒₓ)).
 Proof.
-  intros Hux HPimp Hox. split.
-  + intros h' HQux. apply Hux in HQux as [h [HPux [Hstep Hε]]].
-    by specialize (Hox _ (HPimp h HPux) _ _ Hstep) as [HQox _].
-  + intros h' HQux. apply Hux in HQux as [h [HPux [Hstep Hε]]].
-    specialize (Hox _ (HPimp h HPux) _ _ Hstep) as [HQox Hexit].
-    eexists. split; first done. apply map_empty_subseteq.
+  intros Hux HPimp Hox h' HQux. exists ∅, h'.
+  split; first apply map_union_id_left.
+  split; first apply map_disjoint_empty_l.
+  apply Hux in HQux as [h [HPux [Hstep Hε]]].
+  split; by specialize (Hox _ (HPimp h HPux) _ _ Hstep) as [].
 Qed.
 Theorem principle_of_denial γ e Pₒₓ Qₒₓ v Pᵤₓ Qᵤₓ ε :
   ux_triple γ e Pᵤₓ Qᵤₓ ε →
-  (⊢ (Pᵤₓ ⇒ Pₒₓ)) →
-  ¬ (⊢ (Qᵤₓ ⇒ Qₒₓ)) →
+  ⊢ (Pᵤₓ ⇒ Pₒₓ) →
+  ¬ ⊢ (Qᵤₓ ⇒ Qₒₓ) →
   ¬ ox_triple γ e Pₒₓ Qₒₓ v.
 Proof.
-  intros Hux HPimp HQux Hox. apply HQux. 
+  intros Hux HPimp HnQimp Hox. apply HnQimp. intros h HQux.
   specialize (principle_of_agreement _ _ _ _ _ _ _ _ Hux HPimp Hox).
-  by intros [HQimp _].
+  intros HQimp. apply HQimp in HQux as [? [h' [? [? [Hok HQox]]]]].
+  inversion Hok; subst. by rewrite <- (map_union_id_left h').
 Qed.
 Theorem principle_of_error γ e Pₒₓ Qₒₓ v Pᵤₓ Qᵤₓ ξ :
   ux_triple γ e Pᵤₓ Qᵤₓ (Err ξ) →
-  (⊢ (Pᵤₓ ⇒ Pₒₓ)) →
-  (⊢ Qᵤₓ) →
+  ⊢ (Pᵤₓ ⇒ Pₒₓ) →
+  ⊢ Qᵤₓ →
   ¬ ox_triple γ e Pₒₓ Qₒₓ v.
 Proof.
-  intros Hux HPimp HQux Hox. simpl in *.
+  intros Hux HPimp HQux Hox.
   specialize (principle_of_agreement _ _ _ _ _ _ _ _ Hux HPimp Hox).
-  intros [_ Hfalse]. specialize (Hfalse ∅ (HQux ∅)).
-  by inversion Hfalse as [? [[]]].
+  intros HQimp. eapply HQimp in HQux as [? [h' [? [? [Hok HQox]]]]].
+  by inversion Hok. Unshelve. exact ∅.
+Qed.
+
+(* Validity of function type specification contexts *)
+Theorem type_ctx_validity γ Γ Δ f xs e τs τ vs P Q ε :
+  (* Function f exists in context γ with params xs and body e *)
+  γ !! f = Some {(xs) e} →
+  (* Function f is declared with input types τs and output type τ *)
+  Δ !! f = Some {τs ↣ τ} →
+  (* Derived UX specs Γ are valid wrt implementation context γ *)
+  γ ≺ₛ Γ →
+  (* Post (ε, Q) is derived from pre (P) by replacing 
+     occurrences of xs in e with concrete values vs *)
+  Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉ → 
+  (* Pre (P) implies that values vs are of input type τs *)
+  ⊢ (P ⇒ [∗ vs [⊲] own_vals τs]) →
+  (* Then, assuming that the function implementations γ
+     are valid wrt the declared function types Δ, ... *)
+  valid_types γ Δ →
+  (* ... the derived post (Q) implies that output value v is of type τ
+     and executing the call does not terminate in an error *)
+  ⊢ (Q ⇒ ∃∃ v, (⌜ ε = Ok v ⌝ ∗ [∗ [v ⊲ own_val τ]])).
+Proof.
+  intros HFimpl HFtype HenvS Hrule HPtype.
+  (* Add the new spec to the context *)
+  eapply R_Spec, env_soundness in HenvS as Hspecs; try done.
+  (* Update the rule with the new context *)
+  eapply R_Cons, ux_soundness in Hrule as Hux; first last.
+  { by intros ??. }
+  { by intros ??. }
+  { by apply spec_ctx_subseteq_alter. }
+  (* Obtain the UX triple *)
+  specialize (Hux _ Hspecs).
+  (* Assume type validity and obtain the OX triple *)
+  intros HenvT. apply HenvT in HFtype as [? [? [HFimpl' Hox]]].
+  rewrite HFimpl' in HFimpl; inversion HFimpl; subst.
+  specialize (Hox vs) as [v Hox].
+  (* The goal follows from the principle of agreement *)
+  intros h' HQ. exists v. by eapply principle_of_agreement.
 Qed.

@@ -10,6 +10,12 @@ From RUXt.assertion Require Export hprop.
 Record fun_spec := mk_fun_spec { vals : list val; pre : hprop; tag : exit; post : hprop }.
 Notation "⌈ ( vs ) P | ε , Q ⌉" := (mk_fun_spec vs P ε Q).
 Definition spec_ctx := gmap string (list fun_spec).
+(* Subset relation *)
+Definition spec_ctx_subseteq (Γ Γ' : spec_ctx) : Prop :=
+  ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆ s'.
+Notation "Γ [⊆] Γ'" := (spec_ctx_subseteq Γ Γ') (at level 50).
+
+(* UX rule definition *)
 
 (* Proof rules *)
 Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" (at level 50).
@@ -76,7 +82,7 @@ Inductive ux_rule : spec_ctx → hprop → expr → exit → hprop → Prop :=
   Γ ⊢ ⌈ P1 ⌉ e ⌈ ε, Q1 ⌉ → Γ ⊢ ⌈ P2 ⌉ e ⌈ ε, Q2 ⌉ →
   Γ ⊢ ⌈ P1 ∨∨ P2 ⌉ e ⌈ ε, Q1 ∨∨ Q2 ⌉
 | R_Cons : ∀ Γ Γ' e P P' Q Q' ε,
-  Γ' ⊆ Γ → (⊢ (P' ⇒ P)) → (⊢ (Q ⇒ Q')) → Γ' ⊢ ⌈ P' ⌉ e ⌈ ε , Q' ⌉ →
+  Γ' [⊆] Γ → (⊢ (P' ⇒ P)) → (⊢ (Q ⇒ Q')) → Γ' ⊢ ⌈ P' ⌉ e ⌈ ε , Q' ⌉ →
   Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉
 | R_Exist : ∀ Γ e P Q ε X,
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
@@ -115,11 +121,22 @@ Definition ux_spec (Γ : spec_ctx) (e : expr) (P Q : hprop) (ε : exit) : Prop :
   ∀ γ, valid_specs γ Γ → ux_triple γ e P Q ε.
 
 (* Properties *)
-Lemma env_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
-  valid_specs γ Γ → Γ' ⊆ Γ → valid_specs γ Γ'.
+Lemma spec_ctx_subseteq_alter Γ f spec :
+  Γ [⊆] alter (cons spec) f Γ.
 Proof.
-  intros Hval Hsub f s Hsome' vs P Q ε Hin. rewrite (map_subseteq_spec Γ') in Hsub.
-  specialize (Hsub _ _ Hsome') as Hsome. by specialize (Hval _ _ Hsome _ _ _ _ Hin).
+  intros f' s Hsome. destruct (decide (f = f')) as [->|].
+  + exists (spec :: s). split; last by right.
+    rewrite (lookup_alter _ Γ).
+    by replace (Γ !! f') with (Some s).
+  + exists s. split; last done.
+    by rewrite (lookup_alter_ne _ Γ).
+Qed.
+Lemma env_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
+  valid_specs γ Γ → Γ' [⊆] Γ → valid_specs γ Γ'.
+Proof.
+  intros Hval Hsub f s' Hsome' vs P Q ε Hin'. unfold spec_ctx_subseteq in Hsub.
+  specialize (Hsub _ _ Hsome') as [s [Hsome Hsub]].
+  by eapply Hval; last by apply Hsub.
 Qed.
 
 (* Soundness of proof rules *)

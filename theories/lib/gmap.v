@@ -24,4 +24,7 @@ Section stdpp_extra.
     apply not_elem_of_dom. intros Hin.
     apply Hnin, dom_union, elem_of_union. by right.
   Qed.
+
+  Lemma map_union_id_left {A} (m : M A) : m = ∅ ∪ m.
+  Proof. rewrite left_id; first done; apply map_empty_union. Qed.
 End stdpp_extra.
