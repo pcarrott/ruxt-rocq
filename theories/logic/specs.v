@@ -10,10 +10,23 @@ From RUXt.assertion Require Export hprop.
 Record fun_spec := mk_fun_spec { vals : list val; pre : hprop; tag : exit; post : hprop }.
 Notation "⌈ ( vs ) P | ε , Q ⌉" := (mk_fun_spec vs P ε Q).
 Definition spec_ctx := gmap string (list fun_spec).
+(* Context updates *)
+Notation update spec f Γ := (alter (cons spec) f Γ).
 (* Subset relation *)
 Definition spec_ctx_subseteq (Γ Γ' : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆ s'.
 Notation "Γ [⊆] Γ'" := (spec_ctx_subseteq Γ Γ') (at level 50).
+(* Properties *)
+Lemma spec_ctx_subseteq_update Γ f spec :
+  Γ [⊆] update spec f Γ.
+Proof.
+  intros f' s Hsome. destruct (decide (f = f')) as [->|].
+  + exists (spec :: s). split; last by right.
+    rewrite (lookup_alter _ Γ).
+    by replace (Γ !! f') with (Some s).
+  + exists s. split; last done.
+    by rewrite (lookup_alter_ne _ Γ).
+Qed.
 
 (* Proof rules *)
 Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" (at level 50).
@@ -89,6 +102,12 @@ Inductive ux_rule : spec_ctx → hprop → expr → exit → hprop → Prop :=
   Γ !! f = Some s → ⌈(vs) P | ε, Q⌉ ∈ s → ts = TVals vs →
   Γ ⊢ ⌈ P ⌉ Call f ts ⌈ ε , Q ⌉
 where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (ux_rule Γ P e ε Q).
+(* Properties *)
+Lemma spec_ctx_update_rule Γ e P Q ε f spec :
+  Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → update spec f Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
+Proof.
+  eapply S_Cons; first apply spec_ctx_subseteq_update. all: by intros ??.
+Qed.
 
 (* Environment validity *)
 Reserved Notation "γ ≺ₛ Γ" (at level 50).
@@ -102,7 +121,7 @@ Inductive ux_env_rule : impl_ctx → spec_ctx → Prop :=
 | S_Spec : ∀ γ Γ Γ' P Q ε f xs e vs,
   γ ≺ₛ Γ → γ !! f = Some {(xs) e} →
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ →
-  Γ' = alter (cons ⌈(vs) P | ε, Q⌉) f Γ →
+  Γ' = update ⌈(vs) P | ε, Q⌉ f Γ →
   γ ≺ₛ Γ'
 where "γ ≺ₛ Γ" := (ux_env_rule γ Γ).
 
@@ -117,18 +136,7 @@ Definition valid_specs (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
   ∃ xs e, γ !! f = Some {(xs) e} ∧ ux_triple γ (e⌊vs[//]xs⌋) P Q ε.
 Definition ux_spec (Γ : spec_ctx) (e : expr) (P Q : hprop) (ε : exit) : Prop :=
   ∀ γ, valid_specs γ Γ → ux_triple γ e P Q ε.
-
 (* Properties *)
-Lemma spec_ctx_subseteq_alter Γ f spec :
-  Γ [⊆] alter (cons spec) f Γ.
-Proof.
-  intros f' s Hsome. destruct (decide (f = f')) as [->|].
-  + exists (spec :: s). split; last by right.
-    rewrite (lookup_alter _ Γ).
-    by replace (Γ !! f') with (Some s).
-  + exists s. split; last done.
-    by rewrite (lookup_alter_ne _ Γ).
-Qed.
 Lemma env_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
   valid_specs γ Γ → Γ' [⊆] Γ → valid_specs γ Γ'.
 Proof.
@@ -274,7 +282,6 @@ Proof.
     eexists. split; first done. split; last done.
     by eapply O_Call.
 Qed.
-
 (* Soundness of environment validity *)
 Theorem env_soundness γ Γ :
   γ ≺ₛ Γ → valid_specs γ Γ.
