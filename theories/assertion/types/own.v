@@ -25,5 +25,5 @@ Next Obligation.
 Qed.
 
 Definition uninit := own None.
-Definition own_val τ := own (Some τ).
-Notation own_vals τs := (own_val <$> τs).
+Definition box τ := own (Some τ).
+Notation boxes τs := (box <$> τs).

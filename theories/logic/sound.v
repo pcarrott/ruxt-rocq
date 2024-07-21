@@ -54,13 +54,13 @@ Theorem type_ctx_validity γ Γ Δ f xs e τs τ vs P Q ε :
      replacing occurrences of xs in e with concrete values vs *)
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉ → 
   (* Pre (P) implies that values vs are of input type τs *)
-  ⊢ (P ⇒ [∗ vs [⊲] own_vals τs]) →
+  ⊢ (P ⇒ [∗ vs [⊲] boxes τs]) →
   (* Then, assuming that the declared function types Δ
      are valid wrt the function implementations γ, ... *)
   valid_types γ Δ →
   (* ... the derived post (Q) implies that output value v is of type τ
      and executing the call does not terminate in an error *)
-  ⊢ (Q ⇒ ∃∃ v, (⌜ ε = Ok v ⌝ ∗ [∗ [v ⊲ own_val τ]])).
+  ⊢ (Q ⇒ ∃∃ v, (⌜ ε = Ok v ⌝ ∗ [∗ [v ⊲ box τ]])).
 Proof.
   intros HFimpl HFtype HenvS Hrule HPtype.
   (* Obtain the UX triple *)
