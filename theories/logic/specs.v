@@ -31,79 +31,79 @@ Qed.
 (* Proof rules *)
 Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" (at level 50).
 Inductive ux_rule : spec_ctx → hprop → expr → exit → hprop → Prop :=
-| S_Value : ∀ Γ v,
+| S_Value Γ v :
   Γ ⊢ ⌈ emp ⌉ Pure (PVal v) ⌈ Ok v, emp ⌉
-| S_Neg : ∀ Γ p z,
+| S_Neg Γ p z :
   Γ ⊢ ⌈ emp ⌉ Pure p ⌈ Ok (VInt z), emp ⌉ →
   Γ ⊢ ⌈ emp ⌉ Pure (PNeg p) ⌈ Ok (VInt (-z)), emp ⌉
-| S_Not : ∀ Γ p b,
+| S_Not Γ p b :
   Γ ⊢ ⌈ emp ⌉ Pure p ⌈ Ok (VBool b), emp ⌉ →
   Γ ⊢ ⌈ emp ⌉ Pure (PNot p) ⌈ Ok (VBool (negb b)), emp ⌉
-| S_Plus : ∀ Γ p1 p2 z1 z2,
+| S_Plus Γ p1 p2 z1 z2 :
   Γ ⊢ ⌈ emp ⌉ Pure p1 ⌈ Ok (VInt z1), emp ⌉ → Γ ⊢ ⌈ emp ⌉ Pure p2 ⌈ Ok (VInt z2), emp ⌉ →
   Γ ⊢ ⌈ emp ⌉ Pure (PPlus p1 p2) ⌈ Ok (VInt (z1 + z2)), emp ⌉
-| S_Eq : ∀ Γ p1 p2 z1 z2,
+| S_Eq Γ p1 p2 z1 z2 :
   Γ ⊢ ⌈ emp ⌉ Pure p1 ⌈ Ok (VInt z1), emp ⌉ → Γ ⊢ ⌈ emp ⌉ Pure p2 ⌈ Ok (VInt z2), emp ⌉ →
   Γ ⊢ ⌈ emp ⌉ Pure (PEq p1 p2) ⌈ Ok (VBool (Z.eqb z1 z2)), emp ⌉
-| S_Assume : ∀ Γ,
+| S_Assume Γ :
   Γ ⊢ ⌈ emp ⌉ Assume TTrue ⌈ Ok VUnit, emp ⌉
-| S_Error : ∀ Γ,
+| S_Error Γ :
   Γ ⊢ ⌈ emp ⌉ Error ⌈ Err ECrash, emp ⌉
-| S_Let : ∀ Γ x e1 e2 P Q R v ε,
+| S_Let Γ x e1 e2 P Q R v ε :
   Γ ⊢ ⌈ P ⌉ e1 ⌈ Ok v, R ⌉ → Γ ⊢ ⌈ R ⌉ e2⌊v//x⌋ ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Let x e1 e2 ⌈ ε, Q ⌉
-| S_LetCut : ∀ Γ x e1 e2 P Q ξ,
+| S_LetCut Γ x e1 e2 P Q ξ :
   Γ ⊢ ⌈ P ⌉ e1 ⌈ Err ξ, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Let x e1 e2 ⌈ Err ξ, Q ⌉
-| S_Choice1 : ∀ Γ e1 e2 P Q ε,
+| S_Choice1 Γ e1 e2 P Q ε :
   Γ ⊢ ⌈ P ⌉ e1 ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Choice e1 e2 ⌈ ε, Q ⌉
-| S_Choice2 : ∀ Γ e1 e2 P Q ε,
+| S_Choice2 Γ e1 e2 P Q ε :
   Γ ⊢ ⌈ P ⌉ e2 ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Choice e1 e2 ⌈ ε, Q ⌉
-| S_Loop : ∀ Γ e P Q ε,
+| S_Loop Γ e P Q ε :
   Γ ⊢ ⌈ P ⌉ Let BAnon e (Loop e) ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Loop e ⌈ ε, Q ⌉
-| S_LoopCut : ∀ Γ e P,
+| S_LoopCut Γ e P :
   Γ ⊢ ⌈ P ⌉ Loop e ⌈ Ok VUnit, P ⌉
-| S_Alloc : ∀ Γ l,
+| S_Alloc Γ l :
   Γ ⊢ ⌈ emp ⌉ Alloc ⌈ Ok (VLoc l), PLoc l ↦? ⌉
-| S_Free : ∀ Γ t v,
+| S_Free Γ t v :
   Γ ⊢ ⌈ Term t ↦ PVal v ⌉ Free t ⌈ Ok VUnit, Term t ↦∅ ⌉
-| S_FreeUninit : ∀ Γ t,
+| S_FreeUninit Γ t :
   Γ ⊢ ⌈ Term t ↦? ⌉ Free t ⌈ Ok VUnit, Term t ↦∅ ⌉
-| S_FreeFreed : ∀ Γ t,
+| S_FreeFreed Γ t :
   Γ ⊢ ⌈ Term t ↦∅ ⌉ Free t ⌈ Err ECrash, Term t ↦∅ ⌉
-| S_Store : ∀ Γ t1 t2 v,
+| S_Store Γ t1 t2 v :
   Γ ⊢ ⌈ Term t1 ↦ PVal v ⌉ Store t1 t2 ⌈ Ok VUnit, Term t1 ↦ Term t2 ⌉
-| S_StoreUninit : ∀ Γ t1 t2,
+| S_StoreUninit Γ t1 t2 :
   Γ ⊢ ⌈ Term t1 ↦? ⌉ Store t1 t2 ⌈ Ok VUnit, Term t1 ↦ Term t2 ⌉
-| S_StoreFreed : ∀ Γ t1 t2,
+| S_StoreFreed Γ t1 t2 :
   Γ ⊢ ⌈ Term t1 ↦∅ ⌉ Store t1 t2 ⌈ Err ECrash, Term t1 ↦∅ ⌉
-| S_Load : ∀ Γ t v,
+| S_Load Γ t v :
   Γ ⊢ ⌈ Term t ↦ PVal v ⌉ Load t ⌈ Ok v, Term t ↦ PVal v ⌉
-| S_LoadUninit : ∀ Γ t,
+| S_LoadUninit Γ t :
   Γ ⊢ ⌈ Term t ↦? ⌉ Load t ⌈ Err ECrash, Term t ↦? ⌉
-| S_LoadFreed : ∀ Γ t,
+| S_LoadFreed Γ t :
   Γ ⊢ ⌈ Term t ↦∅ ⌉ Load t ⌈ Err ECrash, Term t ↦∅ ⌉
-| S_Frame : ∀  Γ e P Q R ε,
+| S_Frame  Γ e P Q R ε :
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ∗ R ⌉ e ⌈ ε, Q ∗ R ⌉
-| S_Disj : ∀ Γ e P1 P2 Q1 Q2 ε,
+| S_Disj Γ e P1 P2 Q1 Q2 ε :
   Γ ⊢ ⌈ P1 ⌉ e ⌈ ε, Q1 ⌉ → Γ ⊢ ⌈ P2 ⌉ e ⌈ ε, Q2 ⌉ →
   Γ ⊢ ⌈ P1 ∨∨ P2 ⌉ e ⌈ ε, Q1 ∨∨ Q2 ⌉
-| S_Cons : ∀ Γ Γ' e P P' Q Q' ε,
-  Γ' [⊆] Γ → (⊢ (P' ⇒ P)) → (⊢ (Q ⇒ Q')) → Γ' ⊢ ⌈ P' ⌉ e ⌈ ε , Q' ⌉ →
+| S_Cons Γ Γ' e P P' Q Q' ε :
+  Γ' [⊆] Γ → (⊨ (P' ⇒ P)) → (⊨ (Q ⇒ Q')) → Γ' ⊢ ⌈ P' ⌉ e ⌈ ε , Q' ⌉ →
   Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉
-| S_Exist : ∀ Γ e P Q ε X,
+| S_Exist Γ e P Q ε X :
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ ∃∃ x ⋮ X, P ⌉ e ⌈ ε, ∃∃ x ⋮ X, Q ⌉
-| S_Call : ∀ Γ f ts vs P Q ε s,
+| S_Call Γ f ts vs P Q ε s :
   Γ !! f = Some s → ⌈(vs) P | ε, Q⌉ ∈ s → ts = TVals vs →
   Γ ⊢ ⌈ P ⌉ Call f ts ⌈ ε , Q ⌉
 where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (ux_rule Γ P e ε Q).
-(* Properties *)
-Lemma spec_ctx_update_rule Γ e P Q ε f spec :
+(* Derived rules *)
+Lemma S_Cons_update Γ e P Q ε f spec :
   Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → update spec f Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
 Proof.
   eapply S_Cons; first apply spec_ctx_subseteq_update. all: by intros ??.
@@ -114,11 +114,11 @@ Reserved Notation "γ ≺ₛ Γ" (at level 50).
 Inductive ux_env_rule : impl_ctx → spec_ctx → Prop :=
 | S_Empty :
   ∅ ≺ₛ ∅
-| S_Imp : ∀ γ γ' Γ Γ' f xs e,
+| S_Imp γ γ' Γ Γ' f xs e :
   γ ≺ₛ Γ → f ∉ dom γ →
   γ' = <[f := {(xs) e}]>γ → Γ' = <[f := []]>Γ →
   γ' ≺ₛ Γ'
-| S_Spec : ∀ γ Γ Γ' P Q ε f xs e vs,
+| S_Spec γ Γ Γ' P Q ε f xs e vs :
   γ ≺ₛ Γ → γ !! f = Some {(xs) e} →
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ →
   Γ' = update ⌈(vs) P | ε, Q⌉ f Γ →
@@ -267,10 +267,10 @@ Proof.
     - specialize (IHrule2 _ Hval _ HQ2) as [h [HP [Hstep Hε]]].
       eexists. split; last done. by right.
   + intros γ Hval h' HQ.
-    assert (⊢ (Q ⇒ Q')) as HQent by done; apply HQent in HQ.
+    assert (⊨ (Q ⇒ Q')) as HQent by assumption; apply HQent in HQ.
     eapply env_inclusion in Hval; last done.
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
-    assert (⊢ (P' ⇒ P)) as HPent by done; apply HPent in HP.
+    assert (⊨ (P' ⇒ P)) as HPent by assumption; apply HPent in HP.
     by eexists.
   + intros γ Hval h' [v HQ].
     specialize (IHrule _ Hval _ HQ) as [h [HP [Hstep Hε]]].
@@ -300,7 +300,7 @@ Proof.
     by apply map_disjoint_singleton_r, not_elem_of_dom.
   + intros f' s HΓsome vs' P' Q' ε' Hin.
     apply lookup_alter_Some in HΓsome as [[<- [? [? ->]]]|[]]; last by eapply IHrule.
-    assert (Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉) as Hrule by done.
+    assert (Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉) as Hrule by assumption.
     specialize (ux_soundness _ _ _ _ _ Hrule _ IHrule); intros Hux.
     apply elem_of_cons in Hin as [Heq|]; last by eapply IHrule.
     inversion Heq; subst. by do 2 eexists.

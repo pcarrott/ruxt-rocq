@@ -27,4 +27,6 @@ Section stdpp_extra.
 
   Lemma map_union_id_left {A} (m : M A) : m = ∅ ∪ m.
   Proof. rewrite left_id; first done; apply map_empty_union. Qed.
+  Lemma map_union_id_right {A} (m : M A) : m = m ∪ ∅.
+  Proof. rewrite right_id; first done; apply map_union_empty. Qed.
 End stdpp_extra.

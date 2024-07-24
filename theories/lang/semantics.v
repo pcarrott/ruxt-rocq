@@ -93,67 +93,67 @@ Qed.
 (* Inference rules *)
 Reserved Notation "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩" (at level 50).
 Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
-| O_Pure : ∀ γ p h v, 
+| O_Pure γ p h v :
   ⌊ p ⌋ₚ = Ok v →
   γ ⊢ ⟨ h | Pure p ⟩ ⇓ ⟨ h | Ok v ⟩
-| O_Assume : ∀ γ h,
+| O_Assume γ h :
   γ ⊢ ⟨ h | Assume TTrue ⟩ ⇓ ⟨ h | Ok VUnit ⟩
-| O_Error : ∀ γ h, 
+| O_Error γ h :
   γ ⊢ ⟨ h | Error ⟩ ⇓ ⟨ h | Err ECrash ⟩
-| O_Let : ∀ γ x e1 e2 h h' h'' v ε,
+| O_Let γ x e1 e2 h h' h'' v ε :
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | e2⌊v//x⌋ ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
-| O_LetErr : ∀ γ x e1 e2 h h' ξ,
+| O_LetErr γ x e1 e2 h h' ξ :
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Err ξ ⟩ →
   γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | Err ξ ⟩
-| O_LetMiss : ∀ γ x e1 e2 h h' m,
+| O_LetMiss γ x e1 e2 h h' m :
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Miss m ⟩ →
   γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | Miss m ⟩
-| O_Choice1 : ∀ γ e1 e2 h h' ε,
+| O_Choice1 γ e1 e2 h h' ε :
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
-| O_Choice2 : ∀ γ e1 e2 h h' ε,
+| O_Choice2 γ e1 e2 h h' ε :
   γ ⊢ ⟨ h | e2 ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
-| O_Loop : ∀ γ e h h' ε,
+| O_Loop γ e h h' ε :
   γ ⊢ ⟨ h | Let BAnon e (Loop e) ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Loop e ⟩ ⇓ ⟨ h' | ε ⟩
-| O_LoopCut : ∀ γ e h,
+| O_LoopCut γ e h :
   γ ⊢ ⟨ h | Loop e ⟩ ⇓ ⟨ h | Ok VUnit ⟩
-| O_Alloc : ∀ γ h l,
+| O_Alloc γ h l :
   l ∉ dom h →
   γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ <[l:=Poison]>h | Ok (VLoc l) ⟩
-| O_Free : ∀ γ t h l v,
+| O_Free γ t h l v :
   ⌊ t ⌋ₜ = Ok (VLoc l) → h !! l = Some v → v ≠ Freed →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ <[l:=Freed]>h | Ok VUnit ⟩
-| O_FreeErr : ∀ γ t h l,
+| O_FreeErr γ t h l :
   ⌊ t ⌋ₜ = Ok (VLoc l) → h !! l = Some Freed →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ECrash ⟩
-| O_FreeMiss : ∀ γ t h l,
+| O_FreeMiss γ t h l :
   ⌊ t ⌋ₜ = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Store : ∀ γ t1 t2 h l v1 v2,
+| O_Store γ t1 t2 h l v1 v2 :
   ⌊ t1 ⌋ₜ = Ok (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → ⌊ t2 ⌋ₜ = Ok v2 →
   γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ <[l:=LangVal v2]>h | Ok VUnit⟩
-| O_StoreErr : ∀ γ t1 t2 h l,
+| O_StoreErr γ t1 t2 h l :
   ⌊ t1 ⌋ₜ = Ok (VLoc l) → h !! l = Some Freed →
   γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Err ECrash ⟩
-| O_StoreMiss : ∀ γ t1 t2 h l,
+| O_StoreMiss γ t1 t2 h l :
   ⌊ t1 ⌋ₜ = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Load : ∀ γ t h l v,
+| O_Load γ t h l v :
   ⌊ t ⌋ₜ = Ok (VLoc l) → h !! l = Some (LangVal v) →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Ok v ⟩
-| O_LoadErr : ∀ γ t h l hv,
+| O_LoadErr γ t h l hv :
   ⌊ t ⌋ₜ = Ok (VLoc l) → h !! l = Some hv → hv = Freed ∨ hv = Poison →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Err ECrash ⟩
-| O_LoadMiss : ∀ γ t h l,
+| O_LoadMiss γ t h l :
   ⌊ t ⌋ₜ = Ok (VLoc l) → l ∉ dom h →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Call : ∀ γ f xs e ts h h' ε,
+| O_Call γ f xs e ts h h' ε :
   γ !! f = Some {(xs) e} → γ ⊢ ⟨ h | e⌊ts[//]xs⌋ₜ ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Call f ts ⟩ ⇓ ⟨ h' | ε ⟩
-| O_CallMiss : ∀ γ f ts h,
+| O_CallMiss γ f ts h :
   γ !! f = None →
   γ ⊢ ⟨ h | Call f ts ⟩ ⇓ ⟨ h | Miss (MFun f) ⟩
 where "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩" := (eval_expr γ h e h' ε).
@@ -169,8 +169,7 @@ Proof.
   + split; last done. by apply O_Pure.
   + split; last done. by apply O_Assume.
   + split; last done. by apply O_Error.
-  + assert ((∃ v' : val, Ok v = Ok v') ∨ (∃ ξ : error, Ok v = Err ξ))
-      as Hexists by (by left; eexists).
+  + assert ((∃ v', Ok v = Ok v') ∨ (∃ ξ, Ok v = Err ξ)) as Hexists by (by left; eexists).
     specialize (IHHstep2 Hexit _ _ Hframe' Hγ) as [Hstep2F Hframe''].
     specialize (IHHstep1 Hexists _ _ Hframe'' Hγ) as [Hstep1F Hframe].
     split; last done. by eapply O_Let.

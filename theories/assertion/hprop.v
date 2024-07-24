@@ -45,9 +45,27 @@ Definition hstar (H1 H2 : hprop) : hprop := λ h,
 Notation "H1 ∗ H2" := (hstar H1 H2) (at level 50).
 Definition hiter {X : Type} (xs : list X) (P : X → hprop) : hprop := 
   foldr hstar emp (P <$> xs).
-Notation "'[∗' xs , P ]" := (hiter xs P) (at level 50).
+Notation "[∗ xs , P ]" := (hiter xs P) (at level 50).
 
 Definition hentails (H1 H2 : hprop) : Prop := ∀ h, H1 h → ∃ h', H2 h' ∧ h' ⊆ h.
-Notation "H1 ⊢ H2" := (hentails H1 H2) (at level 50).
+Notation "H1 ⊨ H2" := (hentails H1 H2) (at level 50).
 Definition hassert (H : hprop) : Prop := ∀ h, H h.
-Notation "⊢ H" := (hassert H) (at level 50).
+Notation "⊨ H" := (hassert H) (at level 50).
+
+(* Properties *)
+Lemma hiter_nil {X : Type} (P : X → hprop) h :
+  [∗ [] , P] h ↔ emp h.
+Proof. done. Qed.
+Lemma hiter_cons {X : Type} (P : X → hprop) x xs h :
+  [∗ x :: xs, P] h ↔ (P x ∗ [∗ xs, P]) h.
+Proof. done. Qed.
+Lemma hiter_singleton {X : Type} (P : X → hprop) x h :
+  [∗ [x], P] h ↔ P x h.
+Proof.
+  split.
+  + intros [h1 [h2 [? [? [Hx Hnil]]]]]; inversion Hnil; subst.
+    by rewrite <- (map_union_id_right h1).
+  + intros. exists h, ∅.
+    split; first apply map_union_id_right.
+    by split; first apply map_disjoint_empty_r.
+Qed.

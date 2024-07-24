@@ -10,7 +10,7 @@ From RUXt.assertion Require Export hprop.
 Record type := {
   ty_size : nat;
   ty_own : list val → hprop;
-  ty_size_eq vs : ty_own vs ⊢ ⌜ length vs = ty_size ⌝;
+  ty_size_eq vs : ty_own vs ⊨ ⌜ length vs = ty_size ⌝;
 }.
 Notation "⟦ τ '⟧(' vs )" := (ty_own τ vs).
 
@@ -24,4 +24,4 @@ Definition own_type (t : typing) : hprop :=
   match t with
   | v ⊲ τ => ⟦τ⟧([v])
   end.
-Notation "'[∗' 𝕋 ]" := ([∗ 𝕋, own_type]).
+Notation "[∗ₜ 𝕋 ]" := ([∗ 𝕋, own_type]) (at level 50).
