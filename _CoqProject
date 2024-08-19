@@ -9,6 +9,6 @@ theories/assertion/types/int.v
 theories/assertion/types/bool.v
 theories/assertion/types/unit.v
 theories/assertion/types/own.v
-theories/logic/specs.v
 theories/logic/typing.v
+theories/logic/specs.v
 theories/logic/sound.v

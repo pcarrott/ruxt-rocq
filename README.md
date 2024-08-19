@@ -27,6 +27,6 @@ The `assertion/` directory contains the formalization of our assertion language.
 + `types/`: Directory containing some default type definitions.
 
 The `logic/` directory contains the formalization of both logics and properties relating them.
-+ `specs.v`: Under-approximate logic.
-+ `typing.v`: Over-approximate logic.
++ `specs.v`: Under-approximate proof rules.
++ `typing.v`: Over-approximate typing rules.
 + `sound.v`: Principles relating OX and UX reasoning.

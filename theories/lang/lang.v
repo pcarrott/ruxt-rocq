@@ -14,9 +14,9 @@ Inductive val := VInt (z : Z) | VBool (b : bool) | VLoc (l : loc) | VUnit.
 (* Language terms *)
 Inductive term := TVar (x : string) | TVal (v : val).
 (* Unary operations *)
-Inductive un_op := NegOp | NotOp.
+Inductive un_op := MinusOp | NotOp.
 (* Binary operations *)
-Inductive bin_op := PlusOp | EqOp.
+Inductive bin_op := AddOp | LeOp.
 (* Pure expressions *)
 Inductive pure :=
 | Term (t : term)
@@ -45,8 +45,8 @@ Notation TTrue := (TBool true). Notation PTrue := (Term TTrue).
 Notation TFalse := (TBool false). Notation PFalse := (Term TFalse).
 Notation TLoc l := (TVal (VLoc l)). Notation PLoc l := (Term (TLoc l)).
 Notation TUnit := (TVal VUnit). Notation PUnit := (Term TUnit).
-Notation PNeg p := (UnOp NegOp p). Notation PNot p := (UnOp NotOp p).
-Notation PPlus p1 p2 := (BinOp PlusOp p1 p2). Notation PEq p1 p2 := (BinOp EqOp p1 p2).
+Notation PMinus p := (UnOp MinusOp p). Notation PNot p := (UnOp NotOp p).
+Notation PAdd p1 p2 := (BinOp AddOp p1 p2). Notation PLe p1 p2 := (BinOp LeOp p1 p2).
 
 (* Equality *)
 Global Instance value_eq_dec : EqDecision val.
@@ -84,13 +84,13 @@ Proof.
 Qed.
 Global Instance un_op_countable : Countable un_op.
 Proof.
-  refine (inj_countable' (λ op, match op with NegOp => inl () | NotOp => inr () end)
-  (λ s, match s with inl () => NegOp | inr () => NotOp end) _); by intros [].
+  refine (inj_countable' (λ op, match op with MinusOp => inl () | NotOp => inr () end)
+  (λ s, match s with inl () => MinusOp | inr () => NotOp end) _); by intros [].
 Qed.
 Global Instance bin_op_countable : Countable bin_op.
 Proof.
-  refine (inj_countable' (λ op, match op with PlusOp => inl () | EqOp => inr () end)
-  (λ s, match s with inl () => PlusOp | inr () => EqOp end) _); by intros [].
+  refine (inj_countable' (λ op, match op with AddOp => inl () | LeOp => inr () end)
+  (λ s, match s with inl () => AddOp | inr () => LeOp end) _); by intros [].
 Qed.
 Global Instance pure_countable : Countable pure.
 Proof.
@@ -121,21 +121,22 @@ Proof. Admitted.
 
 (*** Evaluation ***)
 
-(* Variables *)
+(* Terms *)
 Definition eval_term (t : term) : option val :=
   match t with TVal v => Some v | TVar _ => None end.
+Notation "⌊ t ⌋ₜ" := (eval_term t) (at level 50).
 (* Unary operations *)
 Definition eval_un_op (op : un_op) (v : val) : option val :=
   match op, v with
-  | NegOp, VInt z => Some (VInt (-z))
+  | MinusOp, VInt z => Some (VInt (-z))
   | NotOp, VBool b => Some (VBool (negb b))
   | _, _ => None
   end.
 (* Binary operations *)
 Definition eval_bin_op (op : bin_op) (v1 v2 : val) : option val :=
   match op, v1, v2 with
-  | PlusOp, VInt z1, VInt z2 => Some (VInt (z1 + z2))
-  | EqOp, VInt z1, VInt z2 => Some (VBool (Z.eqb z1 z2))
+  | AddOp, VInt z1, VInt z2 => Some (VInt (z1 + z2))
+  | LeOp, VInt z1, VInt z2 => Some (VBool (Z.leb z1 z2))
   | _, _, _ => None
   end.
 (* Pure expressions *)
@@ -148,33 +149,34 @@ Fixpoint eval_pure (p : pure) : option val :=
                       | _, _ => None
                       end
   end.
+Notation "⌊ p ⌋ₚ" := (eval_pure p) (at level 50).
 
 (* Properties *)
 Lemma pure_neg_Some p z :
-  eval_pure p = Some (VInt z) → eval_pure (PNeg p) = Some (VInt (-z)).
+  ⌊ p ⌋ₚ = Some (VInt z) → ⌊ PMinus p ⌋ₚ = Some (VInt (-z)).
 Proof.
   intros Hok. simpl.
   destruct (eval_pure p); last by exfalso.
   by inversion Hok; subst; simpl.
 Qed.
 Lemma pure_not_Some p b :
-  eval_pure p = Some (VBool b) → eval_pure (PNot p) = Some (VBool (negb b)).
+  ⌊ p ⌋ₚ = Some (VBool b) → ⌊ PNot p ⌋ₚ = Some (VBool (negb b)).
 Proof.
   intros Hok. simpl.
   destruct (eval_pure p); last by exfalso.
   by inversion Hok; subst; simpl.
 Qed.
 Lemma pure_plus_Some p1 p2 z1 z2 :
-  eval_pure p1 = Some (VInt z1) → eval_pure p2 = Some (VInt z2) →
-  eval_pure (PPlus p1 p2) = Some (VInt (z1 + z2)).
+  ⌊ p1 ⌋ₚ = Some (VInt z1) → ⌊ p2 ⌋ₚ = Some (VInt z2) →
+  ⌊ PAdd p1 p2 ⌋ₚ = Some (VInt (z1 + z2)).
 Proof.
   intros Hok1 Hok2. simpl.
   destruct (eval_pure p1); destruct (eval_pure p2); try by exfalso.
   by inversion Hok1; inversion Hok2; subst; simpl.
 Qed.
-Lemma pure_eq_Some p1 p2 z1 z2 :
-  eval_pure p1 = Some (VInt z1) → eval_pure p2 = Some (VInt z2) →
-  eval_pure (PEq p1 p2) = Some (VBool (Z.eqb z1 z2)).
+Lemma pure_le_Some p1 p2 z1 z2 :
+  ⌊ p1 ⌋ₚ = Some (VInt z1) → ⌊ p2 ⌋ₚ = Some (VInt z2) →
+  ⌊ PLe p1 p2 ⌋ₚ = Some (VBool (Z.leb z1 z2)).
 Proof.
   intros Hok1 Hok2. simpl.
   destruct (eval_pure p1); destruct (eval_pure p2); try by exfalso.
@@ -218,6 +220,10 @@ Definition subst_terms (xs : list string) (ts : list term) (e : expr) : expr :=
   foldr (λ xt, subst_in_expr xt.1 xt.2) e (zip xs ts).
 Notation "e ⌊ ts [//] xs ⌋ₜ" := (subst_terms xs ts e) (at level 50).
 Notation "e ⌊ vs [//] xs ⌋" := (subst_terms xs (TVals vs) e) (at level 50).
+
+(* Properties *)
+Lemma subst_anon e v : e ⌊ v // <> ⌋ = e.
+Proof. done. Qed.
 
 
 (*** Closed expressions ***)

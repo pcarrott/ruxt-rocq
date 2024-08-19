@@ -3,11 +3,23 @@ From stdpp Require Export gmap.
 Section stdpp_extra.
   Context `{FinMapDom K M}.
 
-  Lemma map_disjoint_insert {A} (m1 m2 : M A) i x :
-    is_Some (m1 !! i) → m1 ##ₘ m2 → <[i:=x]> m1 ##ₘ m2.
+  Lemma map_disjoint_insert_singleton_l {A} (m : M A) i x y z :
+    <[i:=x]> {[i := y]} ##ₘ m ↔ {[i := z]} ##ₘ m.
   Proof.
-    intros [v HSome] Hdisj. apply map_disjoint_insert_l_2; last done.
-    by apply (map_disjoint_Some_l m1 m2 i v).
+    rewrite map_disjoint_insert_l, 2 map_disjoint_singleton_l.
+    by split; first by intros [].
+  Qed.
+  Lemma map_disjoint_insert_singleton_r {A} (m : M A) i x y z :
+    m ##ₘ <[i:=x]> {[i := y]} ↔ m ##ₘ {[i := z]}.
+  Proof.
+    rewrite map_disjoint_insert_r, 2 map_disjoint_singleton_r.
+    by split; first by intros [].
+  Qed.
+
+  Lemma map_disjoint_Some_insert {A} (m1 m2 : M A) i x y :
+    m1 !! i = Some x → m1 ##ₘ m2 → <[i:=y]> m1 ##ₘ m2.
+  Proof.
+    intros. by apply map_disjoint_insert_l_2; first eapply map_disjoint_Some_l.
   Qed.
 
   Lemma map_union_dom {A} (m1 m2 : M A) i :
@@ -25,8 +37,8 @@ Section stdpp_extra.
     apply Hnin, dom_union, elem_of_union. by right.
   Qed.
 
-  Lemma map_union_id_left {A} (m : M A) : m = ∅ ∪ m.
+  Lemma map_union_id_l {A} (m : M A) : m = ∅ ∪ m.
   Proof. rewrite left_id; first done; apply map_empty_union. Qed.
-  Lemma map_union_id_right {A} (m : M A) : m = m ∪ ∅.
+  Lemma map_union_id_r {A} (m : M A) : m = m ∪ ∅.
   Proof. rewrite right_id; first done; apply map_union_empty. Qed.
 End stdpp_extra.
