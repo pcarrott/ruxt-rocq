@@ -21,8 +21,6 @@ Inductive ty_rule : type_ctx → (list typing) → expr → (val → list typing
   Δ ∣ [] ⊢ Pure (PBool b) ⊣ λ v, [v ⊲ bool]
 | T_Unit Δ :
   Δ ∣ [] ⊢ Pure PUnit ⊣ λ v, [v ⊲ unit]
-| T_Val Δ p τ :
-  Δ ∣ [p ⊲ τ] ⊢ Pure (PVal p) ⊣ λ v, [v ⊲ τ]
 | T_Minus Δ p :
   Δ ∣ [] ⊢ Pure p ⊣ (λ v, [v ⊲ int]) →
   Δ ∣ [] ⊢ Pure (PMinus p) ⊣ λ v, [v ⊲ int]
@@ -43,6 +41,8 @@ Inductive ty_rule : type_ctx → (list typing) → expr → (val → list typing
 | T_Choice Δ e1 e2 𝕋 𝕌 :
   Δ ∣ 𝕋 ⊢ e1 ⊣ (λ v, 𝕌) → Δ ∣ 𝕋 ⊢ e2 ⊣ (λ v, 𝕌) →
   Δ ∣ 𝕋 ⊢ Choice e1 e2 ⊣ λ v, 𝕌
+| T_Own Δ vl τ :
+  Δ ∣ [vl ⊲ own τ] ⊢ Pure (PVal vl) ⊣ λ v, [v ⊲ own τ]
 | T_Alloc Δ :
   Δ ∣ [] ⊢ Alloc ⊣ λ vl, [vl ⊲ empty]
 | T_Free Δ vl τ :
@@ -92,10 +92,6 @@ Proof.
     do 2 eexists. repeat split; first apply map_union_id_l;
       first apply map_disjoint_empty_l. rewrite hiter_singleton.
     by replace v with VUnit by (simpl in *; congruence).
-  + inversion Hstep; subst. eexists. split; first done.
-    replace p with v in * by (simpl in *; congruence).
-    destruct H𝕋 as [hv [htrue [-> [Hdisj [Hv Htrue]]]]].
-    by do 2 eexists.
   + inversion Hstep; subst. eexists. split; first done.
     do 2 eexists. repeat split; first apply map_union_id_l;
       first apply map_disjoint_empty_l. rewrite hiter_singleton.
@@ -156,6 +152,10 @@ Proof.
       specialize (IHrule2 _ Hval _ H𝕋 _ _ Hstep2) as
         [? [-> [h𝕌 [htrue [-> [Hdisj𝕌 [H𝕌 Htrue]]]]]]].
       eexists. split; first done. by do 2 eexists.
+  + inversion Hstep; subst. eexists. split; first done.
+    replace v with vl in * by (simpl in *; congruence).
+    destruct H𝕋 as [hv [htrue [-> [Hdisj [Hv Htrue]]]]].
+    by do 2 eexists.
   + inversion Hstep; subst. eexists. split; first done.
     do 2 eexists. repeat split; first apply insert_union_singleton_l;
       first by apply map_disjoint_singleton_l, not_elem_of_dom.
