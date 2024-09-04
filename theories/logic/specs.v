@@ -65,25 +65,25 @@ Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_LoopCut Γ e P :
   Γ ⊢ ⌈ P ⌉ Loop e ⌈ Ok VUnit, P ⌉
 | S_Alloc Γ l :
-  Γ ⊢ ⌈ EMP ⌉ Alloc ⌈ Ok (VLoc l), PLoc l ↦? ⌉
-| S_Free Γ t v :
-  Γ ⊢ ⌈ Term t ↦ PVal v ⌉ Free t ⌈ Ok VUnit, Term t ↦∅ ⌉
-| S_FreeUninit Γ t :
-  Γ ⊢ ⌈ Term t ↦? ⌉ Free t ⌈ Ok VUnit, Term t ↦∅ ⌉
-| S_FreeFreed Γ t :
-  Γ ⊢ ⌈ Term t ↦∅ ⌉ Free t ⌈ Err ECrash, Term t ↦∅ ⌉
-| S_Store Γ t1 t2 v :
-  Γ ⊢ ⌈ Term t1 ↦ PVal v ⌉ Store t1 t2 ⌈ Ok VUnit, Term t1 ↦ Term t2 ⌉
-| S_StoreUninit Γ t1 t2 :
-  Γ ⊢ ⌈ Term t1 ↦? ⌉ Store t1 t2 ⌈ Ok VUnit, Term t1 ↦ Term t2 ⌉
-| S_StoreFreed Γ t1 t2 :
-  Γ ⊢ ⌈ Term t1 ↦∅ ⌉ Store t1 t2 ⌈ Err ECrash, Term t1 ↦∅ ⌉
-| S_Load Γ t v :
-  Γ ⊢ ⌈ Term t ↦ PVal v ⌉ Load t ⌈ Ok v, Term t ↦ PVal v ⌉
-| S_LoadUninit Γ t :
-  Γ ⊢ ⌈ Term t ↦? ⌉ Load t ⌈ Err ECrash, Term t ↦? ⌉
-| S_LoadFreed Γ t :
-  Γ ⊢ ⌈ Term t ↦∅ ⌉ Load t ⌈ Err ECrash, Term t ↦∅ ⌉
+  Γ ⊢ ⌈ EMP ⌉ Alloc ⌈ Ok (VLoc l), l ↦? ⌉
+| S_Free Γ l v :
+  Γ ⊢ ⌈ l ↦ v ⌉ Free (TLoc l) ⌈ Ok VUnit, l ↦∅ ⌉
+| S_FreeUninit Γ l :
+  Γ ⊢ ⌈ l ↦? ⌉ Free (TLoc l) ⌈ Ok VUnit, l ↦∅ ⌉
+| S_FreeFreed Γ l :
+  Γ ⊢ ⌈ l ↦∅ ⌉ Free (TLoc l) ⌈ Err ECrash, l ↦∅ ⌉
+| S_Store Γ l v v' :
+  Γ ⊢ ⌈ l ↦ v' ⌉ Store (TLoc l) (TVal v) ⌈ Ok VUnit, l ↦ v ⌉
+| S_StoreUninit Γ l v :
+  Γ ⊢ ⌈ l ↦? ⌉ Store (TLoc l) (TVal v) ⌈ Ok VUnit, l ↦ v ⌉
+| S_StoreFreed Γ l v :
+  Γ ⊢ ⌈ l ↦∅ ⌉ Store (TLoc l) (TVal v) ⌈ Err ECrash, l ↦∅ ⌉
+| S_Load Γ l v :
+  Γ ⊢ ⌈ l ↦ v ⌉ Load (TLoc l) ⌈ Ok v, l ↦ v ⌉
+| S_LoadUninit Γ l :
+  Γ ⊢ ⌈ l ↦? ⌉ Load (TLoc l) ⌈ Err ECrash, l ↦? ⌉
+| S_LoadFreed Γ l :
+  Γ ⊢ ⌈ l ↦∅ ⌉ Load (TLoc l) ⌈ Err ECrash, l ↦∅ ⌉
 | S_Frame  Γ e P Q R ε :
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ∗ R ⌉ e ⌈ ε, Q ∗ R ⌉
@@ -196,43 +196,43 @@ Proof.
     eexists. by split; last apply O_Loop.
   + split; first done. intros h' HQ.
     eexists. by split; last apply O_LoopCut.
-  + split; first done. intros h [l' [Hpure ->]].
-    eexists. by split; last (inversion Hpure; apply O_Alloc).
-  + split; first done. intros h [l [Hpure ->]].
+  + split; first done. intros h' HQ. simpl in HQ; subst.
+    eexists. by split; last apply O_Alloc.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by do 2 eexists.
     replace {[l := Freed]} with (<[l := Freed]>{[l := LangVal v]} : heap)
       by (subst; eapply insert_singleton).
-    by eapply O_Free; first (by destruct t); first apply lookup_insert.
-  + split; first done. intros h [l [Hpure ->]].
+    by eapply O_Free; first done; first apply lookup_insert.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by do 2 eexists.
     replace {[l := Freed]} with (<[l := Freed]>{[l := Poison]} : heap)
       by (subst; eapply insert_singleton).
-    by eapply O_Free; first (by destruct t); first apply lookup_insert.
-  + split; first done. intros h [l [Hpure ->]].
+    by eapply O_Free; first done; first apply lookup_insert.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
-    by eapply O_FreeErr; try apply lookup_insert.
-  + split; first done. intros h [l [v2 [Hpure1 [Hpure2 ->]]]].
+    by eapply O_FreeErr; first done; first apply lookup_insert.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by do 2 eexists.
-    replace {[l := LangVal v2]} with (<[l := LangVal v2]>{[l := LangVal v]} : heap)
+    replace {[l := LangVal v]} with (<[l := LangVal v]>{[l := LangVal v']} : heap)
       by (subst; eapply insert_singleton).
-    by eapply O_Store; first (by destruct t1; destruct t2); first apply lookup_insert.
-  + split; first done. intros h [l [v2 [Hpure1 [Hpure2 ->]]]].
+    by eapply O_Store; first done; first apply lookup_insert.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by do 2 eexists.
-    replace {[l := LangVal v2]} with (<[l := LangVal v2]>{[l := Poison]} : heap)
+    replace {[l := LangVal v]} with (<[l := LangVal v]>{[l := Poison]} : heap)
       by (subst; eapply insert_singleton).
-    by eapply O_Store; first (by destruct t1; destruct t2); first apply lookup_insert.
-  + split; first done. intros h [l [Hpure ->]].
+    by eapply O_Store; first done; first apply lookup_insert.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
-    by eapply O_StoreErr; try apply lookup_insert.
-  + split; first done. intros h [l [vl [Hpurel [Hpurev ->]]]].
+    by eapply O_StoreErr; first done; first apply lookup_insert.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by do 2 eexists.
-    by eapply O_Load; first (by destruct t); first inversion Hpurev; apply lookup_insert.
-  + split; first done. intros h [l [Hpure ->]].
+    by eapply O_Load; first done; first apply lookup_insert.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
-    by eapply O_LoadErr; first (by destruct t); first apply lookup_insert; last right.
-  + split; first done. intros h [l [Hpure ->]].
+    by eapply O_LoadErr; first done; first apply lookup_insert; last right.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
-    by eapply O_LoadErr; first (by destruct t); first apply lookup_insert; last left.
+    by eapply O_LoadErr; first done; first apply lookup_insert; last left.
   + apply IHrule in Hval as [Hε Hux].
     split; first done. intros h' [hQ [hR [-> [Hdisj [HQ HR]]]]].
     apply Hux in HQ as [h [HP Hstep]].

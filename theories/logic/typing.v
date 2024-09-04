@@ -184,8 +184,8 @@ Proof.
       rewrite hiter_cons in H𝕋. destruct H𝕋 as [hl [hτ2 [-> [Hdisj2 [Hl Hτ2]]]]].
       rewrite hiter_singleton in Hτ2.
       destruct τ1 as [τ1|].
-      * destruct Hl as [prev [hl' [hτ1 [-> [Hdisj1 [Hl' Hτ1]]]]]].
-        apply hsingle_heap in Hl' as ->. apply map_disjoint_union_l in Hdisj2 as [].
+      * destruct Hl as [prev [hl' [hτ1 [-> [Hdisj1 [-> Hτ1]]]]]].
+        apply map_disjoint_union_l in Hdisj2 as [].
         rewrite (insert_union_l _ htrue), (insert_union_l _ hτ2), (insert_union_l _ hτ1).
         replace (<[l:=LangVal v]> ({[l := LangVal prev]}))
           with ({[l := LangVal v]} : heap) by (symmetry; apply insert_singleton).
@@ -196,8 +196,7 @@ Proof.
           rewrite map_disjoint_union_r, 2 map_disjoint_union_l;
           by repeat split; try rewrite map_disjoint_singleton_l in *.
         rewrite hiter_singleton. do 3 eexists. by repeat split;
-          first (by rewrite map_disjoint_singleton_l in *);
-          first by apply hsingle_heap.
+          first rewrite map_disjoint_singleton_l in *.
       * apply own_uninit in Hl as [prev [-> ?]].
         rewrite (insert_union_l _ htrue), (insert_union_l _ hτ2).
         replace (<[l:=LangVal v]> ({[l := prev]}))
@@ -206,9 +205,8 @@ Proof.
         do 2 eexists. repeat split; 
           first by rewrite map_disjoint_union_l;
           split; first rewrite map_disjoint_singleton_l in *.
-        rewrite hiter_singleton. do 3 eexists. repeat split;
-        first (by rewrite map_disjoint_singleton_l in *);
-          first apply hsingle_heap; done.
+        rewrite hiter_singleton. do 3 eexists. by repeat split;
+          first rewrite map_disjoint_singleton_l in *.
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_cons in H𝕋. destruct H𝕋 as [hl [hτ [-> [Hdisj' [Hl _]]]]].
       apply own_loc in Hl as [hv [HSome ?]].
@@ -227,7 +225,7 @@ Proof.
     - eexists. split; first done.
       replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_singleton in H𝕋. destruct H𝕋 as
-        [? [hl [hτ [-> [Hdisj' [->%hsingle_heap Hτ]]]]]].
+        [? [hl [hτ [-> [Hdisj' [-> Hτ]]]]]].
       do 2 eexists. repeat split; first done.
       rewrite hiter_cons, (map_union_comm _ hτ); last done. do 2 eexists.
       apply map_disjoint_union_l in Hdisj as [].
@@ -236,10 +234,10 @@ Proof.
         try by eapply map_disjoint_singleton_l.
       apply lookup_singleton_Some in Hfalse as [_ Heq].
       repeat split; first done; first by inversion Heq; subst.
-      rewrite hiter_singleton. right. by eexists; apply hsingle_heap.
+      rewrite hiter_singleton. right. by eexists.
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_singleton in H𝕋. destruct H𝕋 as
-        [? [hl [hτ [-> [Hdisj' [->%hsingle_heap Hτ]]]]]].
+        [? [hl [hτ [-> [Hdisj' [-> Hτ]]]]]].
       apply map_disjoint_union_l in Hdisj as [].
       assert (({[l := LangVal x]} ∪ hτ ∪ htrue) !! l = Some hv)
         as Hfalse%lookup_union_Some_inv_l%lookup_union_Some_inv_l by assumption;
@@ -248,7 +246,7 @@ Proof.
         by apply lookup_singleton_Some in Hfalse as [_ <-].
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_singleton in H𝕋. destruct H𝕋 as
-        [v' [hl [hτ [-> [Hdisj' [->%hsingle_heap Hτ]]]]]].
+        [v' [hl [hτ [-> [Hdisj' [-> Hτ]]]]]].
       apply map_disjoint_union_l in Hdisj as [].
       assert (l ∉ dom ({[l := LangVal v']} ∪ hτ ∪ htrue)) as Hfalse by assumption.
       exfalso. apply Hfalse, elem_of_dom. eexists.

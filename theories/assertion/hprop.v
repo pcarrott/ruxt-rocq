@@ -15,9 +15,9 @@ Inductive asrt :=
 | AImplies (a1 a2 : asrt)
 | AExists {X : Type} (P : X → asrt)
 | AEmp
-| ASingle (p1 p2 : pure)
-| AUninit (p : pure)
-| AFreed (p : pure)
+| ASingle (l : loc) (v : val)
+| AUninit (l : loc)
+| AFreed (l : loc)
 | AStar (a1 a2 : asrt).
 (* Classical logic *)
 Notation "⌞ P ⌟" := (APure P).
@@ -30,9 +30,9 @@ Notation "∃ₕ x , P" := (AExists (λ x, P)) (at level 50).
 Notation "∃ₕ x ⋮ X , P" := (AExists (λ x : X, P)) (at level 50).
 (* Separation logic *)
 Notation "'EMP'" := AEmp.
-Notation "p1 ↦ p2" := (ASingle p1 p2) (at level 50).
-Notation "p '↦∅'" := (AFreed p) (at level 50).
-Notation "p '↦?'" := (AUninit p) (at level 50).
+Notation "l ↦ v" := (ASingle l v) (at level 50).
+Notation "l '↦∅'" := (AFreed l) (at level 50).
+Notation "l '↦?'" := (AUninit l) (at level 50).
 Notation "H1 ∗ H2" := (AStar H1 H2) (at level 50).
 (* Syntactic sugar *)
 Definition AIter {X : Type} (xs : list X) (P : X → asrt) : asrt := 
@@ -51,9 +51,9 @@ Fixpoint hprop (h : heap) (a : asrt) : Prop :=
   | AImplies a1 a2 => hprop h a1 → hprop h a2
   | AExists P => ∃ x, hprop h (P x)
   | AEmp => h = ∅
-  | ASingle p1 p2 => ∃ l v, ⌊p1⌋ₚ = Some (VLoc l) ∧ ⌊p2⌋ₚ = Some v ∧ h = {[l := LangVal v]}
-  | AUninit p => ∃ l, ⌊p⌋ₚ = Some (VLoc l) ∧ h = {[l := Poison]}
-  | AFreed p => ∃ l, ⌊p⌋ₚ = Some (VLoc l) ∧ h = {[l := Freed]}
+  | ASingle l v => h = {[l := LangVal v]}
+  | AUninit l => h = {[l := Poison]}
+  | AFreed l => h = {[l := Freed]}
   | AStar a1 a2 => ∃ h1 h2, h = h1 ∪ h2 ∧ h1 ##ₘ h2 ∧ hprop h1 a1 ∧ hprop h2 a2
   end.
 (* Entailment *)
@@ -66,15 +66,6 @@ Notation "⊨ H" := (hassert H) (at level 50).
 
 
 (*** Properties ***)
-
-(* Heap assertions *)
-Lemma hsingle_heap l v h :
-  hprop h (PLoc l ↦ PVal v) ↔ h = {[l := LangVal v]}.
-Proof.
-  split; last by intros ->; do 2 eexists.
-  intros [? [? [Hokl [Hokv ?]]]].
-  by inversion Hokl; inversion Hokv; subst.
-Qed.
 
 (* Separating conjunction *)
 Lemma hstar_comm P Q h :

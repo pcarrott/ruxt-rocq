@@ -7,8 +7,8 @@ Program Definition own (τ : option type) : type := {|
   ty_size := 1;
   ty_own vs := match vs with
                | [VLoc l] => match τ with
-                             | Some τ => ∃ₕ v, (PLoc l ↦ PVal v ∗ ⟦τ⟧([v]))
-                             | None => PLoc l ↦? ∨ₕ ∃ₕ v, (PLoc l ↦ PVal v)
+                             | Some τ => ∃ₕ v, (l ↦ v ∗ ⟦τ⟧([v]))
+                             | None => l ↦? ∨ₕ ∃ₕ v, (l ↦ v)
                              end
                | _ => ⌞ False ⌟
                end
@@ -31,22 +31,20 @@ Notation boxes τs := (box <$> τs).
 
 (* Properties *)
 Lemma own_uninit h l :
-  hprop h (own_type (VLoc l ⊲ empty)) → ∃ v, h = {[l:=v]} ∧ v ≠ Freed.
+  hprop h ⟦empty⟧([VLoc l]) → ∃ v, h = {[l:=v]} ∧ v ≠ Freed.
 Proof.
-  intros [[? [Hok ->]]|[? [? [? [Hokl [Hokv ->]]]]]].
-  + inversion Hok; subst. eexists; by split.
-  + inversion Hokl; inversion Hokv; subst. eexists; by split.
+  intros [|[]]; by eexists.
 Qed.
 Lemma own_box h l τ :
-  hprop h (own_type (VLoc l ⊲ box τ)) → ∃ v, h !! l = Some (LangVal v).
+  hprop h ⟦box τ⟧([VLoc l]) → ∃ v, h !! l = Some (LangVal v).
 Proof.
-  intros [? [h1 [h2 [-> [Hdisj [[? [v [Hokl [Hokv ->]]]] _]]]]]].
-  inversion Hokl; inversion Hokv; subst. eexists.
+  intros [? [h1 [h2 [-> [Hdisj [Hl Hτ]]]]]].
+  simpl in Hl; subst. eexists.
   rewrite (lookup_union_l _ h2); first apply lookup_singleton.
   by eapply map_disjoint_singleton_l.
 Qed.
 Lemma own_loc h l τ :
-  hprop h (own_type (VLoc l ⊲ own τ)) → ∃ v, h !! l = Some v ∧ v ≠ Freed.
+  hprop h ⟦own τ⟧([VLoc l]) → ∃ v, h !! l = Some v ∧ v ≠ Freed.
 Proof.
   intros Hown. destruct τ.
   + apply own_box in Hown as []. eexists.
