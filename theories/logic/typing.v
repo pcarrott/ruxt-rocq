@@ -126,7 +126,7 @@ Proof.
       specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
         [? [Hok [h𝕍 [htrue [-> [Hdisj𝕍 [H𝕍%own_typings Htrue]]]]]]].
       symmetry in Hok; inversion Hok; subst.
-      eapply ox_frame in Hstep2 as [h𝕌' [Hdisj𝕌' Hstep2]]; try done;
+      eapply frame_subtraction in Hstep2 as [h𝕌' [Hdisj𝕌' Hstep2]]; try done;
         last apply map_disjoint_empty_r; last apply map_union_id_r.
       destruct Hstep2 as [[Hstep2 ->]|[m [Hstep2 Hmiss]]].
       * specialize (IHrule' _ _ Hval _ H𝕍 _ _ Hstep2) as
@@ -256,7 +256,7 @@ Proof.
     apply map_disjoint_union_l in Hdisj as [].
     assert (h𝕋 ##ₘ h𝕍 ∪ htrue) as Hdisj by by apply map_disjoint_union_r.
     rewrite <- (assoc_L (∪)) in Hstep.
-    specialize (ox_frame _ _ _ _ _ Hstep _ _ _ _ eq_refl Hdisj
+    specialize (frame_subtraction _ _ _ _ _ Hstep _ _ _ _ eq_refl Hdisj
       (map_union_id_r _) (map_disjoint_empty_r _))
       as [h𝕌' [Hdisj𝕌' [[Hstep' ->]|[m [Hstep' Hmiss]]]]].
     - specialize (IHrule _ Hval _ H𝕋 _ _ Hstep') as
@@ -276,7 +276,7 @@ Proof.
     rewrite <- (assoc_L (∪)) in Hstep.
     assert (h𝕋' ##ₘ h ∪ htrue) as Hdisj' by
       by apply map_disjoint_union_l in Hdisj as []; apply map_disjoint_union_r.
-    specialize (ox_frame _ _ _ _ _ Hstep _ _ _ _ eq_refl Hdisj'
+    specialize (frame_subtraction _ _ _ _ _ Hstep _ _ _ _ eq_refl Hdisj'
       (map_union_id_r _) (map_disjoint_empty_r _))
       as [h𝕌'' [Hdisj𝕌'' [[Hstep' ->]|[m [Hstep' Hmiss]]]]].
     - specialize (IHrule _ Hval _ H𝕋' _ _ Hstep') as

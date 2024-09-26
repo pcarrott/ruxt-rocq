@@ -119,62 +119,87 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 where "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩" := (eval_expr γ h e h' ε).
 
 (* Under-approximate frame validity - frame addition *)
-Definition ux_frameable (ε : exit) : Prop :=
-  match ε with Ok _ | Err _ => True | Miss _ => False end.
-Theorem ux_frame γ h e h' ε :
+Theorem frame_addition γ h e h' ε :
   γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
-  ux_frameable ε →
-  ∀ hF γF, h' ##ₘ hF → γ ##ₘ γF → γ ∪ γF ⊢ ⟨ h ∪ hF | e ⟩ ⇓ ⟨ h' ∪ hF | ε ⟩ ∧ h ##ₘ hF.
+  ∀ hF γF, h' ##ₘ hF → γ ##ₘ γF →
+  (γ ∪ γF ⊢ ⟨ h ∪ hF | e ⟩ ⇓ ⟨ h' ∪ hF | ε ⟩ ∧ h ##ₘ hF) ∨
+  (∃ m, ε = Miss m ∧ (
+    (∃ l, m = MLoc l ∧ l ∈ dom hF) ∨ (∃ f, m = MFun f ∧ f ∈ dom γF)
+  )).
 Proof.
-  intros Hstep Hexit.
+  intros Hstep.
   induction Hstep; intros hF γF Hframe' Hγ.
-  + by split; first apply O_Pure.
-  + by split; first apply O_Assume.
-  + by split; first apply O_Error.
-  + assert (ux_frameable (Ok v)) as Hok by done.
-    specialize (IHHstep2 Hexit _ _ Hframe' Hγ) as [Hstep2F Hframe''].
-    specialize (IHHstep1 Hok _ _ Hframe'' Hγ) as [Hstep1F Hframe].
-    by split; first eapply O_Let.
-  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
-    by split; first  apply O_LetErr.
-  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
-    by split; first apply O_LetMiss.
-  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
-    by split; first eapply O_Choice.
-  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
-    by split; first apply O_Loop.
-  + by split; first apply O_LoopCut.
+  + left. by split; first apply O_Pure.
+  + left. by split; first apply O_Assume.
+  + left. by split; first apply O_Error.
+  + specialize (IHHstep2 _ _ Hframe' Hγ) as [[Hstep2F Hframe'']|]; last by right.
+    specialize (IHHstep1 _ _ Hframe'' Hγ) as [[Hstep1F Hframe]|[?[]]]; last by exfalso.
+    left. by split; first eapply O_Let.
+  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
+    left. by split; first apply O_LetErr.
+  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
+    left. by split; first apply O_LetMiss.
+  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
+    left. by split; first eapply O_Choice.
+  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
+    left. by split; first apply O_Loop.
+  + left. by split; first apply O_LoopCut.
   + apply map_disjoint_insert_l in Hframe' as [HNone Hframe].
     rewrite <- (insert_union_l h).
-    split; last done. apply O_Alloc.
+    left. split; last done. apply O_Alloc.
     rewrite <- not_elem_of_dom in HNone; set_solver.
   + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
     rewrite <- (insert_union_l h).
-    split; last done. eapply O_Free; try done.
+    left. split; last done. eapply O_Free; try done.
     apply lookup_union_Some_raw; by left.
-  + split; last done. eapply O_FreeErr; try done.
+  + left. split; last done. eapply O_FreeErr; try done.
     apply lookup_union_Some_raw; by left.
-  + done.
+  + destruct (hF !! l) as [hv|] eqn:Hlookup.
+    - right. eexists. split; first done. left. eexists. split; first done.
+      apply elem_of_dom. by eexists.
+    - left. split; last done. eapply O_FreeMiss; try done.
+      assert (l ∉ dom h) as Hnin by assumption.
+      intros Hin%dom_union. apply Hnin.
+      apply elem_of_union in Hin as []; first done.
+      rewrite <- not_elem_of_dom in Hlookup. by exfalso.
   + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
     rewrite <- (insert_union_l h).
-    split; last done. eapply O_Store; try done.
+    left. split; last done. eapply O_Store; try done.
     apply lookup_union_Some_raw; by left.
-  + split; last done. eapply O_StoreErr; try done.
+  + left. split; last done. eapply O_StoreErr; try done.
     apply lookup_union_Some_raw; by left.
-  + done.
-  + split; last done. eapply O_Load; try done.
+  + destruct (hF !! l) as [hv|] eqn:Hlookup.
+    - right. eexists. split; first done. left. eexists. split; first done.
+      apply elem_of_dom. by eexists.
+    - left. split; last done. eapply O_StoreMiss; try done.
+      assert (l ∉ dom h) as Hnin by assumption.
+      intros Hin%dom_union. apply Hnin.
+      apply elem_of_union in Hin as []; first done.
+      rewrite <- not_elem_of_dom in Hlookup. by exfalso.
+  + left. split; last done. eapply O_Load; try done.
     apply lookup_union_Some_raw; by left.
-  + split; last done. eapply O_LoadErr; try done.
+  + left. split; last done. eapply O_LoadErr; try done.
     apply lookup_union_Some_raw; by left.
-  + done.
-  + specialize (IHHstep Hexit _ _ Hframe' Hγ) as [HstepF Hframe].
-    split; last done. eapply O_Call; try done.
+  + destruct (hF !! l) as [hv|] eqn:Hlookup.
+    - right. eexists. split; first done. left. eexists. split; first done.
+      apply elem_of_dom. by eexists.
+    - left. split; last done. eapply O_LoadMiss; try done.
+      assert (l ∉ dom h) as Hnin by assumption.
+      intros Hin%dom_union. apply Hnin.
+      apply elem_of_union in Hin as []; first done.
+      rewrite <- not_elem_of_dom in Hlookup. by exfalso.
+  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
+    left. split; last done. eapply O_Call; try done.
     apply lookup_union_Some_raw; by left.
-  + done.
+  + destruct (γF !! f) as [hv|] eqn:Hlookup.
+    - right. eexists. split; first done. right. eexists. split; first done.
+      apply elem_of_dom. by eexists.
+    - left. split; last done. eapply O_CallMiss; try done.
+      by apply lookup_union_None.
 Qed.
 
 (* Over-approximate frame validity - frame subtraction *)
-Theorem ox_frame γ h e h' ε :
+Theorem frame_subtraction γ h e h' ε :
   γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
   ∀ hs hF γs γF, h = hs ∪ hF → hs ##ₘ hF → γ = γs ∪ γF → γs ##ₘ γF →
   ∃ hs', hs' ##ₘ hF ∧ (

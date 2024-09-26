@@ -134,6 +134,8 @@ where "γ ≺ₛ Γ" := (ux_env_rule γ Γ).
 (*** Soundness ***)
 
 (* Proof rule definition *)
+Definition ux_frameable (ε : exit) : Prop :=
+  match ε with Ok _ | Err _ => True | Miss _ => False end.
 Definition ux_triple (γ : impl_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
   ux_frameable ε ∧ ∀ h', hprop h' Q →
   ∃ h, hprop h P ∧ γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩.
@@ -236,7 +238,7 @@ Proof.
   + apply IHrule in Hval as [Hε Hux].
     split; first done. intros h' [hQ [hR [-> [Hdisj [HQ HR]]]]].
     apply Hux in HQ as [h [HP Hstep]].
-    eapply ux_frame in Hstep as []; last apply map_disjoint_empty_r; try done.
+    eapply frame_addition in Hstep as [[]|[? [->]]]; last apply map_disjoint_empty_r; try done.
     eexists. by split; first do 2 eexists; last rewrite <- (map_union_empty γ).
   + specialize (IHrule1 _ Hval) as [_ Hux1]. specialize (IHrule2 _ Hval) as [Hε Hux2].
     split; first done. intros h' [HQ1|HQ2].
@@ -276,7 +278,7 @@ Proof.
     eexists. split; first done.
     rewrite (insert_union_singleton_r γ); last by apply not_elem_of_dom.
     rewrite <- (map_union_empty h), <- (map_union_empty h').
-    apply ux_frame; try done; first apply map_disjoint_empty_r.
+    eapply frame_addition in Hstep as [[]|[? [->]]]; try done; first apply map_disjoint_empty_r.
     by apply map_disjoint_singleton_r, not_elem_of_dom.
   + intros f' s HΓsome vs' P' Q' ε' Hin.
     apply lookup_alter_Some in HΓsome as [[<- [? [? ->]]]|[]]; last by eapply IHrule.
