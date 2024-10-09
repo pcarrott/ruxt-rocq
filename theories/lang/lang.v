@@ -4,7 +4,8 @@ From stdpp Require Import countable.
 
 (* Memory locations *)
 Definition block : Set := positive.
-Definition loc : Set := block * Z.
+Definition offset : Set := nat.
+Definition loc : Set := block * offset.
 
 
 (*** Language syntax ***)
@@ -29,7 +30,6 @@ Inductive expr :=
 | Assume (t : term)
 | Let (x : binder) (e1 e2 : expr)
 | Choice (e1 e2 : expr)
-| Loop (e : expr)
 | Alloc
 | Free (t : term)
 | Store (t1 t2 : term)
@@ -116,7 +116,54 @@ Proof.
   - done.
 Qed.
 Global Instance expr_countable : Countable expr.
-Proof. Admitted.
+Proof.
+  set (enc :=
+    fix go e :=
+      match e with
+      | Pure p => GenLeaf (inl (Some p))
+      | Error => GenLeaf (inl None)
+      | Let x e1 e2 => GenNode 0 [GenLeaf (inr (inl x)); go e1; go e2]
+      | Choice e1 e2 => GenNode 1 [go e1; go e2]
+      | Assume t => GenLeaf (inr (inr (inr (inl t))))
+      | Call f ts => GenNode 2 [
+          GenLeaf (inr (inr (inr (inr (inl f)))));
+          GenLeaf (inr (inr (inr (inr (inr ts)))))
+        ]
+      | Alloc => GenLeaf (inr (inr (inl (inl None))))
+      | Free t => GenLeaf (inr (inr (inl (inl (Some t)))))
+      | Store t1 t2 => GenNode 3 [
+          GenLeaf (inr (inr (inl (inr (inl (inl t1))))));
+          GenLeaf (inr (inr (inl (inr (inl (inr t2))))))
+        ]
+      | Load t => GenLeaf (inr (inr (inl (inr (inr t)))))
+      end
+  ).
+  set (dec :=
+    fix go e :=
+      match e with
+      | GenLeaf (inl (Some p)) => Pure p
+      | GenLeaf (inl None) => Error
+      | GenNode 0 [GenLeaf (inr (inl x)); e1; e2] => Let x (go e1) (go e2)
+      | GenNode 1 [e1; e2] => Choice (go e1) (go e2)
+      | GenLeaf (inr (inr (inr (inl t)))) => Assume t
+      | GenNode 2 [
+          GenLeaf (inr (inr (inr (inr (inl f)))));
+          GenLeaf (inr (inr (inr (inr (inr ts)))))
+        ] => Call f ts
+      | GenLeaf (inr (inr (inl (inl None)))) => Alloc
+      | GenLeaf (inr (inr (inl (inl (Some t))))) => Free t
+      | GenNode 3 [
+          GenLeaf (inr (inr (inl (inr (inl (inl t1))))));
+          GenLeaf (inr (inr (inl (inr (inl (inr t2))))))
+        ] => Store t1 t2
+      | GenLeaf (inr (inr (inl (inr (inr t))))) => Load t
+      | _ => Error (* dummy *)
+      end).
+  refine (inj_countable' enc dec _).
+  refine (fix go (e : expr) {struct e} := _ with gov (v : val) {struct v} := _ for go).
+  - destruct e as [| | | | | | | | |]; simpl; by f_equal.
+  - done.
+Qed.
 
 
 (*** Evaluation ***)
@@ -205,7 +252,6 @@ Fixpoint subst_in_expr (x : string) (t : term) (e : expr) : expr :=
   | Let bx e1 e2 => Let bx (subst_in_expr x t e1)
                   (if decide (bx = BNamed x) then e2 else subst_in_expr x t e2)
   | Choice e1 e2 => Choice (subst_in_expr x t e1) (subst_in_expr x t e2)
-  | Loop e => Loop (subst_in_expr x t e)
   | Alloc => Alloc
   | Free T => Free (subst_in_term x t T)
   | Store T1 T2 => Store (subst_in_term x t T1) (subst_in_term x t T2)
@@ -248,7 +294,6 @@ Fixpoint closed_expr' (X : list string) (e : expr) : Prop :=
   | Assume t => closed_term' X t
   | Let x e1 e2 => closed_expr' X e1 ∧ closed_expr' (x :b: X) e2
   | Choice e1 e2 => closed_expr' X e1 ∧ closed_expr' X e2
-  | Loop e => closed_expr' X e
   | Alloc => True
   | Free t => closed_term' X t
   | Store t1 t2 => closed_term' X t1 ∧ closed_term' X t2

@@ -35,10 +35,13 @@ Notation "l '↦∅'" := (AFreed l) (at level 50).
 Notation "l '↦?'" := (AUninit l) (at level 50).
 Notation "H1 ∗ H2" := (AStar H1 H2) (at level 50).
 (* Syntactic sugar *)
-Definition AIter {X : Type} (xs : list X) (P : X → asrt) : asrt := 
-  foldr AStar EMP (P <$> xs).
-Notation "[∗ xs , P ]" := (AIter xs P) (at level 50).
 Notation "⌜ P ⌝" := (P ∗ TRUE).
+Fixpoint AIterL {X : Type} (xs : list X) (P : nat → X → asrt) : asrt := 
+  match xs with
+  | [] => EMP
+  | x :: xs => (P 0 x) ∗ AIterL xs (λ n, P (S n))
+  end.
+Notation "[∗ xs , P ]" := (AIterL xs (λ _, P)) (at level 50).
 
 (* Assertion semantics *)
 Fixpoint hprop (h : heap) (a : asrt) : Prop :=
@@ -60,9 +63,9 @@ Fixpoint hprop (h : heap) (a : asrt) : Prop :=
 Definition hmodels (P Q : asrt) : Prop :=
   ∀ h, hprop h P → ∃ h', h' ⊆ h ∧ hprop h' Q.
 Notation "H1 ⊨ H2" := (hmodels H1 H2) (at level 50).
-Definition hassert (P : asrt) : Prop :=
+Definition hvalid (P : asrt) : Prop :=
   ∀ h, hprop h P.
-Notation "⊨ H" := (hassert H) (at level 50).
+Notation "⊨ H" := (hvalid H) (at level 50).
 Definition sat (P : asrt) : Prop := ¬ ⊨ (P →ₕ FALSE).
 
 

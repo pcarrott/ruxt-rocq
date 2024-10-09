@@ -75,11 +75,6 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Choice γ ei e1 e2 h h' ε :
   γ ⊢ ⟨ h | ei ⟩ ⇓ ⟨ h' | ε ⟩ → (ei = e1 ∨ ei = e2) →
   γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
-| O_Loop γ e h h' ε :
-  γ ⊢ ⟨ h | Let <> e (Loop e) ⟩ ⇓ ⟨ h' | ε ⟩ →
-  γ ⊢ ⟨ h | Loop e ⟩ ⇓ ⟨ h' | ε ⟩
-| O_LoopCut γ e h :
-  γ ⊢ ⟨ h | Loop e ⟩ ⇓ ⟨ h | Ok VUnit ⟩
 | O_Alloc γ h l :
   l ∉ dom h →
   γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ <[l:=Poison]>h | Ok (VLoc l) ⟩
@@ -141,9 +136,6 @@ Proof.
     left. by split; first apply O_LetMiss.
   + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
     left. by split; first eapply O_Choice.
-  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
-    left. by split; first apply O_Loop.
-  + left. by split; first apply O_LoopCut.
   + apply map_disjoint_insert_l in Hframe' as [HNone Hframe].
     rewrite <- (insert_union_l h).
     left. split; last done. apply O_Alloc.
@@ -241,13 +233,6 @@ Proof.
     destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
     - left. by split; first eapply O_Choice.
     - right. eexists. by split; first eapply O_Choice.
-  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
-    eexists. split; first done.
-    destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
-    - left. by split; first apply O_Loop.
-    - right. eexists. by split; first apply O_Loop.
-  + eexists. split; first done. left.
-    by split; first apply O_LoopCut.
   + eexists. split; first by subst; apply map_disjoint_union_insert. left.
     split; last by rewrite <- insert_union_l, Hheap. apply O_Alloc. set_solver.
   + subst; assert (_ !! l = Some _) as Hlookup by done.

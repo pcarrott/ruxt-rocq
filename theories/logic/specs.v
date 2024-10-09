@@ -30,6 +30,8 @@ Proof.
 Qed.
 
 (* Proof rules *)
+Definition ux_frameable (ε : exit) (R : asrt) : Prop :=
+  match ε with Miss (MLoc l) => ∀ h, hprop h R → l ∉ dom h | _ => True end.
 Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" (at level 50).
 Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_Value Γ v :
@@ -59,11 +61,6 @@ Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_Choice Γ ei e1 e2 P Q ε :
   Γ ⊢ ⌈ P ⌉ ei ⌈ ε, Q ⌉ → (ei = e1 ∨ ei = e2) →
   Γ ⊢ ⌈ P ⌉ Choice e1 e2 ⌈ ε, Q ⌉
-| S_Loop Γ e P Q ε :
-  Γ ⊢ ⌈ P ⌉ Let <> e (Loop e) ⌈ ε, Q ⌉ →
-  Γ ⊢ ⌈ P ⌉ Loop e ⌈ ε, Q ⌉
-| S_LoopCut Γ e P :
-  Γ ⊢ ⌈ P ⌉ Loop e ⌈ Ok VUnit, P ⌉
 | S_Alloc Γ l :
   Γ ⊢ ⌈ EMP ⌉ Alloc ⌈ Ok (VLoc l), l ↦? ⌉
 | S_Free Γ l v :
@@ -72,20 +69,26 @@ Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
   Γ ⊢ ⌈ l ↦? ⌉ Free (TLoc l) ⌈ Ok VUnit, l ↦∅ ⌉
 | S_FreeFreed Γ l :
   Γ ⊢ ⌈ l ↦∅ ⌉ Free (TLoc l) ⌈ Err ECrash, l ↦∅ ⌉
+| S_FreeEmp Γ l :
+  Γ ⊢ ⌈ EMP ⌉ Free (TLoc l) ⌈ Miss (MLoc l), EMP ⌉
 | S_Store Γ l v v' :
   Γ ⊢ ⌈ l ↦ v' ⌉ Store (TLoc l) (TVal v) ⌈ Ok VUnit, l ↦ v ⌉
 | S_StoreUninit Γ l v :
   Γ ⊢ ⌈ l ↦? ⌉ Store (TLoc l) (TVal v) ⌈ Ok VUnit, l ↦ v ⌉
 | S_StoreFreed Γ l v :
   Γ ⊢ ⌈ l ↦∅ ⌉ Store (TLoc l) (TVal v) ⌈ Err ECrash, l ↦∅ ⌉
+| S_StoreEmp Γ l v :
+  Γ ⊢ ⌈ EMP ⌉ Store (TLoc l) (TVal v) ⌈ Miss (MLoc l), EMP ⌉
 | S_Load Γ l v :
   Γ ⊢ ⌈ l ↦ v ⌉ Load (TLoc l) ⌈ Ok v, l ↦ v ⌉
 | S_LoadUninit Γ l :
   Γ ⊢ ⌈ l ↦? ⌉ Load (TLoc l) ⌈ Err ECrash, l ↦? ⌉
 | S_LoadFreed Γ l :
   Γ ⊢ ⌈ l ↦∅ ⌉ Load (TLoc l) ⌈ Err ECrash, l ↦∅ ⌉
+| S_LoadEmp Γ l :
+  Γ ⊢ ⌈ EMP ⌉ Load (TLoc l) ⌈ Miss (MLoc l), EMP ⌉
 | S_Frame  Γ e P Q R ε :
-  Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
+  Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ → ux_frameable ε R →
   Γ ⊢ ⌈ P ∗ R ⌉ e ⌈ ε, Q ∗ R ⌉
 | S_Disj Γ e P1 P2 Q1 Q2 ε :
   Γ ⊢ ⌈ P1 ⌉ e ⌈ ε, Q1 ⌉ → Γ ⊢ ⌈ P2 ⌉ e ⌈ ε, Q2 ⌉ →
@@ -134,10 +137,10 @@ where "γ ≺ₛ Γ" := (ux_env_rule γ Γ).
 (*** Soundness ***)
 
 (* Proof rule definition *)
-Definition ux_frameable (ε : exit) : Prop :=
-  match ε with Ok _ | Err _ => True | Miss _ => False end.
+Definition valid_exit (ε : exit) : Prop :=
+  match ε with Miss (MFun _) => False | _ => True end.
 Definition ux_triple (γ : impl_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
-  ux_frameable ε ∧ ∀ h', hprop h' Q →
+  valid_exit ε ∧ ∀ h', hprop h' Q →
   ∃ h, hprop h P ∧ γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩.
 Definition valid_specs (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∀ vs P Q ε, ⌈(vs) P | ε, Q⌉ ∈ s →
@@ -192,12 +195,6 @@ Proof.
     split; first done. intros h' HQ.
     apply Hux in HQ as [h [HP Hstep]].
     eexists. by split; last eapply O_Choice.
-  + apply IHrule in Hval as [Hε Hux].
-    split; first done. intros h' HQ.
-    apply Hux in HQ as [h [HP Hstep]].
-    eexists. by split; last apply O_Loop.
-  + split; first done. intros h' HQ.
-    eexists. by split; last apply O_LoopCut.
   + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. by split; last apply O_Alloc.
   + split; first done. intros h' HQ. simpl in HQ; subst.
@@ -212,7 +209,10 @@ Proof.
     by eapply O_Free; first done; first apply lookup_insert.
   + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
-    by eapply O_FreeErr; first done; first apply lookup_insert.
+    by eapply O_FreeErr; last apply lookup_insert.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
+    eexists. split; first by eexists.
+    by eapply O_FreeMiss; last apply not_elem_of_dom.
   + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by do 2 eexists.
     replace {[l := LangVal v]} with (<[l := LangVal v]>{[l := LangVal v']} : heap)
@@ -225,21 +225,29 @@ Proof.
     by eapply O_Store; first done; first apply lookup_insert.
   + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
-    by eapply O_StoreErr; first done; first apply lookup_insert.
+    by eapply O_StoreErr; last apply lookup_insert.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
+    eexists. split; first by eexists.
+    by eapply O_StoreMiss; last apply not_elem_of_dom.
   + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by do 2 eexists.
-    by eapply O_Load; first done; first apply lookup_insert.
+    by eapply O_Load; last apply lookup_insert.
   + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
     by eapply O_LoadErr; first done; first apply lookup_insert; last right.
   + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
     by eapply O_LoadErr; first done; first apply lookup_insert; last left.
+  + split; first done. intros h' HQ. simpl in HQ; subst.
+    eexists. split; first by eexists.
+    by eapply O_LoadMiss; last apply not_elem_of_dom.
   + apply IHrule in Hval as [Hε Hux].
     split; first done. intros h' [hQ [hR [-> [Hdisj [HQ HR]]]]].
     apply Hux in HQ as [h [HP Hstep]].
-    eapply frame_addition in Hstep as [[]|[? [->]]]; last apply map_disjoint_empty_r; try done.
-    eexists. by split; first do 2 eexists; last rewrite <- (map_union_empty γ).
+    eapply frame_addition in Hstep as [[]|[m [-> Hmiss]]]; last apply map_disjoint_empty_r; try done.
+    - eexists. by split; first do 2 eexists; last rewrite <- (map_union_empty γ).
+    - exfalso. assert (ux_frameable (Miss m) R) as Hframe by assumption.
+      by destruct Hmiss as [[?[->]]|[?[]]]; first apply Hframe in HR.
   + specialize (IHrule1 _ Hval) as [_ Hux1]. specialize (IHrule2 _ Hval) as [Hε Hux2].
     split; first done. intros h' [HQ1|HQ2].
     - specialize (Hux1 _ HQ1) as [h1 [HP1 Hstep1]].
@@ -278,7 +286,8 @@ Proof.
     eexists. split; first done.
     rewrite (insert_union_singleton_r γ); last by apply not_elem_of_dom.
     rewrite <- (map_union_empty h), <- (map_union_empty h').
-    eapply frame_addition in Hstep as [[]|[? [->]]]; try done; first apply map_disjoint_empty_r.
+    eapply frame_addition in Hstep as [[]|[[] [-> [[?[]]|[?[]]]]]];
+      try done; first apply map_disjoint_empty_r.
     by apply map_disjoint_singleton_r, not_elem_of_dom.
   + intros f' s HΓsome vs' P' Q' ε' Hin.
     apply lookup_alter_Some in HΓsome as [[<- [? [? ->]]]|[]]; last by eapply IHrule.
