@@ -7,7 +7,6 @@ Definition block : Set := positive.
 Definition loc : Set := block * nat.
 Definition offset (l : loc) (i : nat) : loc := (l.1, l.2 + i).
 Notation "l +ₗ i" := (offset l i) (at level 50).
-
 (* Properties *)
 Lemma offset_0 l : l +ₗ 0 = l.
 Proof. unfold offset. rewrite Nat.add_0_r. by destruct l. Qed.
@@ -256,7 +255,7 @@ Proof.
   destruct (eval_pure p1); destruct (eval_pure p2); try by exfalso.
   by inversion Hok1; inversion Hok2; subst; simpl.
 Qed.
-Lemma pure_offest_Some p1 p2 l z :
+Lemma pure_offset_Some p1 p2 l z :
   ⌊ p1 ⌋ₚ = Some (VLoc l) → ⌊ p2 ⌋ₚ = Some (VInt z) →
   ⌊ POffset p1 p2 ⌋ₚ = Some (VLoc (l +ₗ (Z.to_nat z))).
 Proof.
