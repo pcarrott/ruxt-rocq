@@ -37,11 +37,12 @@ Notation "H1 ∗ H2" := (AStar H1 H2) (at level 50).
 (* Syntactic sugar *)
 Notation "⌜ P ⌝" := (P ∗ TRUE).
 Fixpoint AIterL {X : Type} (xs : list X) (P : nat → X → asrt) : asrt := 
-  match xs with
-  | [] => EMP
-  | x :: xs => (P 0 x) ∗ AIterL xs (λ n, P (S n))
-  end.
+  match xs with [] => EMP | x :: xs => (P 0 x) ∗ AIterL xs (λ n, P (S n)) end.
 Notation "[∗ xs , P ]" := (AIterL xs (λ _, P)) (at level 50).
+Notation "l ↦∗ vs" := (AIterL vs (λ i v, offset l i ↦ v)) (at level 50).
+Definition opt_init (l : loc) (v : option val) : asrt :=
+  match v with Some v => l ↦ v | None => l ↦? end.
+Notation "l ↦∗? vs" := (AIterL vs (λ i v, opt_init (offset l i) v)) (at level 50).
 
 (* Assertion semantics *)
 Fixpoint hprop (h : heap) (a : asrt) : Prop :=

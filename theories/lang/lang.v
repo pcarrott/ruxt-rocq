@@ -4,8 +4,8 @@ From stdpp Require Import countable.
 
 (* Memory locations *)
 Definition block : Set := positive.
-Definition offset : Set := nat.
-Definition loc : Set := block * offset.
+Definition loc : Set := block * nat.
+Definition offset (l : loc) (o : nat) : loc := (l.1, l.2 + o).
 
 
 (*** Language syntax ***)
@@ -17,7 +17,7 @@ Inductive term := TVar (x : string) | TVal (v : val).
 (* Unary operations *)
 Inductive un_op := MinusOp | NotOp.
 (* Binary operations *)
-Inductive bin_op := AddOp | LeOp.
+Inductive bin_op := AddOp | LeOp | OffsetOp.
 (* Pure expressions *)
 Inductive pure :=
 | Term (t : term)
@@ -47,6 +47,7 @@ Notation TLoc l := (TVal (VLoc l)). Notation PLoc l := (Term (TLoc l)).
 Notation TUnit := (TVal VUnit). Notation PUnit := (Term TUnit).
 Notation PMinus p := (UnOp MinusOp p). Notation PNot p := (UnOp NotOp p).
 Notation PAdd p1 p2 := (BinOp AddOp p1 p2). Notation PLe p1 p2 := (BinOp LeOp p1 p2).
+Notation POffset p1 p2 := (BinOp OffsetOp p1 p2).
 
 (* Equality *)
 Global Instance value_eq_dec : EqDecision val.
@@ -89,8 +90,22 @@ Proof.
 Qed.
 Global Instance bin_op_countable : Countable bin_op.
 Proof.
-  refine (inj_countable' (λ op, match op with AddOp => inl () | LeOp => inr () end)
-  (λ s, match s with inl () => AddOp | inr () => LeOp end) _); by intros [].
+  refine (inj_countable'
+    (λ op, 
+      match op with
+      | AddOp => inl ()
+      | LeOp => inr (inl ())
+      | OffsetOp => inr (inr ())
+      end
+    )
+    (λ s,
+      match s with
+      | inl () => AddOp
+      | inr (inl ()) => LeOp
+      | inr (inr ()) => OffsetOp end
+    )
+    _
+  ); by intros [].
 Qed.
 Global Instance pure_countable : Countable pure.
 Proof.
@@ -184,6 +199,7 @@ Definition eval_bin_op (op : bin_op) (v1 v2 : val) : option val :=
   match op, v1, v2 with
   | AddOp, VInt z1, VInt z2 => Some (VInt (z1 + z2))
   | LeOp, VInt z1, VInt z2 => Some (VBool (Z.leb z1 z2))
+  | OffsetOp, VLoc l, VInt z => Some (VLoc (offset l (Z.to_nat z)))
   | _, _, _ => None
   end.
 (* Pure expressions *)
@@ -229,6 +245,14 @@ Proof.
   destruct (eval_pure p1); destruct (eval_pure p2); try by exfalso.
   by inversion Hok1; inversion Hok2; subst; simpl.
 Qed.
+Lemma pure_offest_Some p1 p2 l z :
+  ⌊ p1 ⌋ₚ = Some (VLoc l) → ⌊ p2 ⌋ₚ = Some (VInt z) →
+  ⌊ POffset p1 p2 ⌋ₚ = Some (VLoc (offset l (Z.to_nat z))).
+Proof.
+  intros Hok1 Hok2. simpl.
+  destruct (eval_pure p1); destruct (eval_pure p2); try by exfalso.
+  by inversion Hok1; inversion Hok2; subst; simpl.
+Qed.
 
 
 (*** Substitution ***)
@@ -250,7 +274,7 @@ Fixpoint subst_in_expr (x : string) (t : term) (e : expr) : expr :=
   | Error => Error
   | Assume T => Assume (subst_in_term x t T)
   | Let bx e1 e2 => Let bx (subst_in_expr x t e1)
-                  (if decide (bx = BNamed x) then e2 else subst_in_expr x t e2)
+                    (if decide (bx = BNamed x) then e2 else subst_in_expr x t e2)
   | Choice e1 e2 => Choice (subst_in_expr x t e1) (subst_in_expr x t e2)
   | Alloc => Alloc
   | Free T => Free (subst_in_term x t T)
