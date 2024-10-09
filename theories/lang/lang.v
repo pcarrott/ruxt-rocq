@@ -5,9 +5,11 @@ From stdpp Require Import countable.
 (* Memory locations *)
 Definition block : Set := positive.
 Definition loc : Set := block * nat.
-Definition offset (l : loc) (o : nat) : loc := (l.1, l.2 + o).
+Definition offset (l : loc) (i : nat) : loc := (l.1, l.2 + i).
+Notation "l +ₗ i" := (offset l i) (at level 50).
+
 (* Properties *)
-Lemma loc_add_0 l : offset l 0 = l.
+Lemma offset_0 l : l +ₗ 0 = l.
 Proof. unfold offset. rewrite Nat.add_0_r. by destruct l. Qed.
 
 
@@ -33,8 +35,8 @@ Inductive expr :=
 | Assume (t : term)
 | Let (x : binder) (e1 e2 : expr)
 | Choice (e1 e2 : expr)
-| Alloc
-| Free (t : term)
+| Alloc (t : term)
+| Free (t1 t2 : term)
 | Store (t1 t2 : term)
 | Load (t : term)
 | Call (f : string) (ts : list term).
@@ -147,9 +149,12 @@ Proof.
           GenLeaf (inr (inr (inr (inr (inl f)))));
           GenLeaf (inr (inr (inr (inr (inr ts)))))
         ]
-      | Alloc => GenLeaf (inr (inr (inl (inl None))))
-      | Free t => GenLeaf (inr (inr (inl (inl (Some t)))))
-      | Store t1 t2 => GenNode 3 [
+      | Alloc t => GenLeaf (inr (inr (inl (inl (inl t)))))
+      | Free t1 t2 => GenNode 3 [
+          GenLeaf (inr (inr (inl (inl (inr (inl t1))))));
+          GenLeaf (inr (inr (inl (inl (inr (inr t2))))))
+        ]
+      | Store t1 t2 => GenNode 4 [
           GenLeaf (inr (inr (inl (inr (inl (inl t1))))));
           GenLeaf (inr (inr (inl (inr (inl (inr t2))))))
         ]
@@ -168,9 +173,12 @@ Proof.
           GenLeaf (inr (inr (inr (inr (inl f)))));
           GenLeaf (inr (inr (inr (inr (inr ts)))))
         ] => Call f ts
-      | GenLeaf (inr (inr (inl (inl None)))) => Alloc
-      | GenLeaf (inr (inr (inl (inl (Some t))))) => Free t
+      | GenLeaf (inr (inr (inl (inl (inl t))))) => Alloc t
       | GenNode 3 [
+          GenLeaf (inr (inr (inl (inl (inr (inl t1))))));
+          GenLeaf (inr (inr (inl (inl (inr (inr t2))))))
+        ] => Free t1 t2
+      | GenNode 4 [
           GenLeaf (inr (inr (inl (inr (inl (inl t1))))));
           GenLeaf (inr (inr (inl (inr (inl (inr t2))))))
         ] => Store t1 t2
@@ -202,7 +210,7 @@ Definition eval_bin_op (op : bin_op) (v1 v2 : val) : option val :=
   match op, v1, v2 with
   | AddOp, VInt z1, VInt z2 => Some (VInt (z1 + z2))
   | LeOp, VInt z1, VInt z2 => Some (VBool (Z.leb z1 z2))
-  | OffsetOp, VLoc l, VInt z => Some (VLoc (offset l (Z.to_nat z)))
+  | OffsetOp, VLoc l, VInt z => Some (VLoc (l +ₗ (Z.to_nat z)))
   | _, _, _ => None
   end.
 (* Pure expressions *)
@@ -250,7 +258,7 @@ Proof.
 Qed.
 Lemma pure_offest_Some p1 p2 l z :
   ⌊ p1 ⌋ₚ = Some (VLoc l) → ⌊ p2 ⌋ₚ = Some (VInt z) →
-  ⌊ POffset p1 p2 ⌋ₚ = Some (VLoc (offset l (Z.to_nat z))).
+  ⌊ POffset p1 p2 ⌋ₚ = Some (VLoc (l +ₗ (Z.to_nat z))).
 Proof.
   intros Hok1 Hok2. simpl.
   destruct (eval_pure p1); destruct (eval_pure p2); try by exfalso.
@@ -279,8 +287,8 @@ Fixpoint subst_in_expr (x : string) (t : term) (e : expr) : expr :=
   | Let bx e1 e2 => Let bx (subst_in_expr x t e1)
                     (if decide (bx = BNamed x) then e2 else subst_in_expr x t e2)
   | Choice e1 e2 => Choice (subst_in_expr x t e1) (subst_in_expr x t e2)
-  | Alloc => Alloc
-  | Free T => Free (subst_in_term x t T)
+  | Alloc T => Alloc (subst_in_term x t T)
+  | Free T1 T2 => Free (subst_in_term x t T1) (subst_in_term x t T2)
   | Store T1 T2 => Store (subst_in_term x t T1) (subst_in_term x t T2)
   | Load T => Load (subst_in_term x t T)
   | Call f Ts => Call f (subst_in_term x t <$> Ts)
@@ -321,8 +329,8 @@ Fixpoint closed_expr' (X : list string) (e : expr) : Prop :=
   | Assume t => closed_term' X t
   | Let x e1 e2 => closed_expr' X e1 ∧ closed_expr' (x :b: X) e2
   | Choice e1 e2 => closed_expr' X e1 ∧ closed_expr' X e2
-  | Alloc => True
-  | Free t => closed_term' X t
+  | Alloc t => closed_term' X t
+  | Free t1 t2 => closed_term' X t1 ∧ closed_term' X t2
   | Store t1 t2 => closed_term' X t1 ∧ closed_term' X t2
   | Load t => closed_term' X t
   | Call _ ts => Forall (closed_term' X) ts

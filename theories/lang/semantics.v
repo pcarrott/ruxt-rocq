@@ -13,12 +13,12 @@ Inductive heap_value := LangVal (v : val) | Poison | Freed.
 Definition heap := gmap loc heap_value.
 (* Heap operations *)
 Fixpoint hreplicate (hv : heap_value) (h : heap) (l : loc) (n : nat) : heap :=
-  match n with O => h | S n => <[ offset l n := hv ]> (hreplicate hv h l n) end.
+  match n with O => h | S n => <[ l +ₗ n := hv ]> (hreplicate hv h l n) end.
 Notation halloc := (hreplicate Poison).
 Notation hfree := (hreplicate Freed).
 (* Properties *)
 Lemma hreplicate_disj hv h h' l n :
-  hreplicate hv h l n ##ₘ h' ↔ h ##ₘ h' ∧ ∀ i, i < n → offset l i ∉ dom h'.
+  hreplicate hv h l n ##ₘ h' ↔ h ##ₘ h' ∧ ∀ i, i < n → l +ₗ i ∉ dom h'.
 Proof.
   induction n as [|n IH].
   + split.
@@ -104,18 +104,22 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Choice γ ei e1 e2 h h' ε :
   γ ⊢ ⟨ h | ei ⟩ ⇓ ⟨ h' | ε ⟩ → (ei = e1 ∨ ei = e2) →
   γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
-| O_Alloc γ h l :
-  l ∉ dom h →
-  γ ⊢ ⟨ h | Alloc ⟩ ⇓ ⟨ <[l:=Poison]>h | Ok (VLoc l) ⟩
-| O_Free γ t h l v :
-  ⌊ t ⌋ₜ = Some (VLoc l) → h !! l = Some v → v ≠ Freed →
-  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ <[l:=Freed]>h | Ok VUnit ⟩
-| O_FreeErr γ t h l :
-  ⌊ t ⌋ₜ = Some (VLoc l) → h !! l = Some Freed →
-  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ECrash ⟩
-| O_FreeMiss γ t h l :
-  ⌊ t ⌋ₜ = Some (VLoc l) → l ∉ dom h →
-  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+| O_Alloc γ t h l n :
+  ⌊ t ⌋ₜ = Some (VInt (Z.of_nat n)) →
+  l.2 = 0 → (∀ i, i < n → l +ₗ i ∉ dom h) →
+  γ ⊢ ⟨ h | Alloc t ⟩ ⇓ ⟨ halloc h l n | Ok (VLoc l) ⟩
+| O_Free γ t1 t2 h l n v :
+  ⌊ t1 ⌋ₜ = Some (VLoc l) → ⌊ t2 ⌋ₜ = Some (VInt (Z.of_nat n)) →
+  (∀ i, i < n → h !! (l +ₗ i) = Some v ∧ v ≠ Freed) →
+  γ ⊢ ⟨ h | Free t1 t2 ⟩ ⇓ ⟨ hfree h l n | Ok VUnit ⟩
+| O_FreeErr γ t1 t2 h l n i :
+  ⌊ t1 ⌋ₜ = Some (VLoc l) → ⌊ t2 ⌋ₜ = Some (VInt (Z.of_nat n)) →
+  i < n → h !! (l +ₗ i) = Some Freed →
+  γ ⊢ ⟨ h | Free t1 t2 ⟩ ⇓ ⟨ h | Err ECrash ⟩
+| O_FreeMiss γ t1 t2 h l n i :
+  ⌊ t1 ⌋ₜ = Some (VLoc l) → ⌊ t2 ⌋ₜ = Some (VInt (Z.of_nat n)) →
+  i < n → l +ₗ i ∉ dom h →
+  γ ⊢ ⟨ h | Free t1 t2 ⟩ ⇓ ⟨ h | Miss (MLoc (l +ₗ i)) ⟩
 | O_Store γ t1 t2 h l v1 v2 :
   ⌊ t1 ⌋ₜ = Some (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → ⌊ t2 ⌋ₜ = Some v2 →
   γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ <[l:=LangVal v2]>h | Ok VUnit⟩
@@ -165,21 +169,24 @@ Proof.
     left. by split; first apply O_LetMiss.
   + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
     left. by split; first eapply O_Choice.
-  + apply map_disjoint_insert_l in Hframe' as [HNone Hframe].
-    rewrite <- (insert_union_l h).
-    left. split; last done. apply O_Alloc.
-    rewrite <- not_elem_of_dom in HNone; set_solver.
-  + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
-    rewrite <- (insert_union_l h).
-    left. split; last done. eapply O_Free; try done.
-    apply lookup_union_Some_raw; by left.
+  + left. rewrite hreplicate_union; last done.
+    apply hreplicate_disj in Hframe' as [? Hnin].
+    split; first eapply O_Alloc; try done.
+    intros i Hi. specialize (Hnin i Hi). set_solver.
+  + left. rewrite hreplicate_union; last done.
+    apply hreplicate_disj in Hframe' as [].
+    split; first eapply O_Free; try done.
+    assert (∀ i, i < n → h !! (l +ₗ i) = Some v ∧ v ≠ Freed)
+      as Hlookup by assumption.
+    intros i Hi. specialize (Hlookup i Hi) as [].
+    split; last done. apply lookup_union_Some_raw; by left.
   + left. split; last done. eapply O_FreeErr; try done.
     apply lookup_union_Some_raw; by left.
-  + destruct (hF !! l) as [hv|] eqn:Hlookup.
+  + destruct (hF !! (l +ₗ i)) as [hv|] eqn:Hlookup.
     - right. eexists. split; first done. left. eexists. split; first done.
       apply elem_of_dom. by eexists.
     - left. split; last done. eapply O_FreeMiss; try done.
-      assert (l ∉ dom h) as Hnin by assumption.
+      assert (l +ₗ i ∉ dom h) as Hnin by assumption.
       intros Hin%dom_union. apply Hnin.
       apply elem_of_union in Hin as []; first done.
       rewrite <- not_elem_of_dom in Hlookup. by exfalso.
@@ -262,23 +269,52 @@ Proof.
     destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
     - left. by split; first eapply O_Choice.
     - right. eexists. by split; first eapply O_Choice.
-  + eexists. split; first by subst; apply map_disjoint_union_insert. left.
-    split; last by rewrite <- insert_union_l, Hheap. apply O_Alloc. set_solver.
-  + subst; assert (_ !! l = Some _) as Hlookup by done.
-    apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - eexists. split; first by eapply map_disjoint_Some_insert.
-      left. split; last by rewrite <- insert_union_l. by eapply O_Free.
+  + subst. assert (halloc hs l n ##ₘ hF) as Hdisj.
+    { apply hreplicate_disj. set_solver. }
+    eexists. split; first done. left.
+    split; last by rewrite hreplicate_union.
+    by apply O_Alloc; last set_solver.
+  + subst. assert (
+      (∀ i, i < n → hs !! (l +ₗ i) = Some v ∧ v ≠ Freed)
+      ∨
+      (∃ i, i < n ∧ l +ₗ i ∉ dom hs)
+    ) as [Hlookup|[i [Hi Hnin]]].
+    {
+      assert (∀ i, i < n → (hs ∪ hF) !! (l +ₗ i) = Some v ∧ v ≠ Freed)
+        as Hlookup by assumption. clear -Hlookup.
+      induction n as [|n IH]; first by left; lia.
+      assert (∀ i, i < n → (hs ∪ hF) !! (l +ₗ i) = Some v ∧ v ≠ Freed) as Hlookup'.
+      { intros i Hi. apply Hlookup. lia. }
+      specialize (IH Hlookup') as [Hlookup''|[i [Hi Hnin]]].
+      + specialize (Hlookup n) as [Hlookup ?]; first lia.
+        apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
+        - left. intros i Hi. by assert (i = n ∨ i < n) as [<-|] by lia; last apply Hlookup''.
+        - right. eexists. split; last by apply not_elem_of_dom. lia.
+      + right. eexists. split; last done. lia.
+    }
+    - assert (∀ i : nat, i < n → l +ₗ i ∉ dom hF).
+      {
+        intros i Hi. apply Hlookup in Hi as [].
+        by eapply not_elem_of_dom, map_disjoint_Some_l.
+      }
+      eexists. split; first by eapply hreplicate_disj.
+      left. split; first by eapply O_Free.
+      rewrite hreplicate_union; first done. by apply hreplicate_disj.
     - eexists. split; first done.
-      right. eexists. split; first by apply O_FreeMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      right. eexists. split; first by eapply O_FreeMiss.
+      left. eexists. split; first done.
+      rewrite (elem_of_dom hF). eexists.
+      eapply lookup_union_Some_inv_r; last by apply not_elem_of_dom.
+      assert (∀ i, i < n → (hs ∪ hF) !! (l +ₗ i) = Some v ∧ v ≠ Freed)
+        as Hlookup by assumption; by apply Hlookup.
   + eexists. split; first done.
-    subst; assert (_ !! l = Some _) as Hlookup by done.
+    subst; assert (_ !! (l +ₗ i) = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_FreeErr.
-    - right. eexists. split; first by apply O_FreeMiss, not_elem_of_dom.
+    - right. eexists. split; first by eapply O_FreeMiss, not_elem_of_dom.
       left. eexists. split; first done. by eapply map_union_dom; first eexists.
   + eexists. split; first done.
-    left. split; last done. apply O_FreeMiss; first done. set_solver.
+    left. split; last done. eapply O_FreeMiss; try done. set_solver.
   + subst; assert (_ !! l = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - eexists. split; first by eapply map_disjoint_Some_insert.
