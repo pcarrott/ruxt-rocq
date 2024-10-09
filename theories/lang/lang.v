@@ -6,6 +6,9 @@ From stdpp Require Import countable.
 Definition block : Set := positive.
 Definition loc : Set := block * nat.
 Definition offset (l : loc) (o : nat) : loc := (l.1, l.2 + o).
+(* Properties *)
+Lemma loc_add_0 l : offset l 0 = l.
+Proof. unfold offset. rewrite Nat.add_0_r. by destruct l. Qed.
 
 
 (*** Language syntax ***)

@@ -11,6 +11,35 @@ Definition impl_ctx := gmap string fun_impl.
 (* Heaps *)
 Inductive heap_value := LangVal (v : val) | Poison | Freed.
 Definition heap := gmap loc heap_value.
+(* Heap operations *)
+Fixpoint hreplicate (hv : heap_value) (h : heap) (l : loc) (n : nat) : heap :=
+  match n with O => h | S n => <[ offset l n := hv ]> (hreplicate hv h l n) end.
+Notation halloc := (hreplicate Poison).
+Notation hfree := (hreplicate Freed).
+(* Properties *)
+Lemma hreplicate_disj hv h h' l n :
+  hreplicate hv h l n ##ₘ h' ↔ h ##ₘ h' ∧ ∀ i, i < n → offset l i ∉ dom h'.
+Proof.
+  induction n as [|n IH].
+  + split.
+    - simpl; intros. by split; last (intros i Hi; lia).
+    - simpl. by intros [].
+  + split.
+    - simpl in *; intros [?%not_elem_of_dom Hdisj]%map_disjoint_insert_l.
+      apply IH in Hdisj as [? Hnin]. split; first done. intros i Hi.
+      by assert (i = n ∨ i < n) as [->|] by lia; last (apply Hnin; lia).
+    - simpl in *; intros [Hdisj Hnin]. apply map_disjoint_insert_l.
+      split; first (apply not_elem_of_dom, Hnin; lia).
+      apply IH. split; first done. intros i Hi.
+      apply Hnin; lia.
+Qed.
+Lemma hreplicate_union hv h h' b n :
+  hreplicate hv h b n ##ₘ h' → hreplicate hv h b n ∪ h' = hreplicate hv (h ∪ h') b n.
+Proof.
+  intros Hdisj. induction n as [|n IH]; first done. simpl in *.
+  apply map_disjoint_insert_l in Hdisj as [_ <-%IH].
+  symmetry; apply insert_union_l.
+Qed.
 
 
 (*** Termination ***)
