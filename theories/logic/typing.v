@@ -35,14 +35,14 @@ Inductive ty_rule : type_ctx → (list typing) → expr → (val → list typing
   Δ ∣ [] ⊢ Pure (PLe p1 p2) ⊣ λ v, [v ⊲ bool]
 | T_Assume Δ b :
   Δ ∣ [] ⊢ Assume (TBool b) ⊣ λ _, []
-| T_Let Δ x e1 e2 𝕋 𝕌 𝕍 :
-  Δ ∣ 𝕋 ⊢ e1 ⊣ (λ v', 𝕍) → (∀ v', Δ ∣ 𝕍 ⊢ e2⌊v'//x⌋ ⊣ λ v, 𝕌) →
-  Δ ∣ 𝕋 ⊢ Let x e1 e2 ⊣ λ v, 𝕌
+| T_Let Δ x e1 e2 𝕋 λ𝕌 λ𝕍 :
+  Δ ∣ 𝕋 ⊢ e1 ⊣ λ𝕍 → (∀ v', Δ ∣ λ𝕍 v' ⊢ e2⌊v'//x⌋ ⊣ λ𝕌) →
+  Δ ∣ 𝕋 ⊢ Let x e1 e2 ⊣ λ𝕌
 | T_Choice Δ e1 e2 𝕋 𝕌 :
   Δ ∣ 𝕋 ⊢ e1 ⊣ (λ v, 𝕌) → Δ ∣ 𝕋 ⊢ e2 ⊣ (λ v, 𝕌) →
   Δ ∣ 𝕋 ⊢ Choice e1 e2 ⊣ λ v, 𝕌
-| T_Own Δ vl τ :
-  Δ ∣ [vl ⊲ own τ] ⊢ Pure (PVal vl) ⊣ λ v, [v ⊲ own τ]
+| T_Val Δ v' τ :
+  Δ ∣ [v' ⊲ τ] ⊢ Pure (PVal v') ⊣ λ v, [v ⊲ τ]
 | T_Alloc Δ :
   Δ ∣ [] ⊢ Alloc ⊣ λ vl, [vl ⊲ empty]
 | T_Free Δ vl τ :
@@ -54,9 +54,9 @@ Inductive ty_rule : type_ctx → (list typing) → expr → (val → list typing
 | T_Frame Δ e 𝕋 𝕌 𝕍 :
   Δ ∣ 𝕋 ⊢ e ⊣ (λ v, 𝕌) →
   Δ ∣ 𝕋 ++ 𝕍 ⊢ e ⊣ λ v, 𝕌 ++ 𝕍
-| T_Cons Δ e 𝕋 𝕌 𝕋' 𝕌' :
-  𝕋' ⊆+ 𝕋 → (∀ v : val, 𝕌 ⊆+ 𝕌') → Δ ∣ 𝕋' ⊢ e ⊣ (λ v, 𝕌') →
-  Δ ∣ 𝕋 ⊢ e ⊣ λ v, 𝕌
+| T_Cons Δ e 𝕋 λ𝕌 𝕋' λ𝕌' :
+  𝕋' ⊆+ 𝕋 → (∀ v, λ𝕌 v ⊆+ λ𝕌' v) → Δ ∣ 𝕋' ⊢ e ⊣ λ𝕌' →
+  Δ ∣ 𝕋 ⊢ e ⊣ λ𝕌
 | T_Call Δ f ts τs τ vs :
   Δ !! f = Some {τs ↣ τ} → ts = TVals vs →
   Δ ∣ vs [⊲] boxes τs ⊢ Call f ts ⊣ λ v, [v ⊲ box τ]
@@ -122,7 +122,7 @@ Proof.
   + inversion Hstep; subst.
     - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩) as Hstep1 by assumption.
       assert (γ ⊢ ⟨ h'' | e2 ⌊ v // x ⌋ ⟩ ⇓ ⟨ h' | ε ⟩) as Hstep2 by assumption.
-      assert (∀ v', ty_spec Δ (e2⌊v'//x⌋) 𝕍 (λ v, 𝕌)) as IHrule' by assumption.
+      assert (∀ v', ty_spec Δ (e2⌊v'//x⌋) (λ𝕍 v') λ𝕌) as IHrule' by assumption.
       specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
         [? [Hok [h𝕍 [htrue [-> [Hdisj𝕍 [H𝕍%own_typings Htrue]]]]]]].
       symmetry in Hok; inversion Hok; subst.
@@ -153,7 +153,7 @@ Proof.
         [? [-> [h𝕌 [htrue [-> [Hdisj𝕌 [H𝕌 Htrue]]]]]]].
       eexists. split; first done. by do 2 eexists.
   + inversion Hstep; subst. eexists. split; first done.
-    replace v with vl in * by (simpl in *; congruence).
+    replace v with v' in * by (simpl in *; congruence).
     destruct H𝕋 as [hv [htrue [-> [Hdisj [Hv Htrue]]]]].
     by do 2 eexists.
   + inversion Hstep; subst. eexists. split; first done.
@@ -281,7 +281,7 @@ Proof.
       as [h𝕌'' [Hdisj𝕌'' [[Hstep' ->]|[m [Hstep' Hmiss]]]]].
     - specialize (IHrule _ Hval _ H𝕋' _ _ Hstep') as
         [? [-> [h𝕌' [htrue' [-> [Hdisj𝕌' [H𝕌' Htrue']]]]]]].
-      assert (val → 𝕌 ⊆+ 𝕌') as Hsub by assumption.
+      assert (∀ v, λ𝕌 v ⊆+ λ𝕌' v) as Hsub by assumption.
       eapply hiter_submseteq in H𝕌' as [h𝕌 [? [-> [Hdisj𝕌 H𝕌]]]]; last by eapply Hsub.
       apply map_disjoint_union_l in Hdisj𝕌' as [].
       repeat apply map_disjoint_union_l in Hdisj𝕌'' as [Hdisj𝕌'' ?].
