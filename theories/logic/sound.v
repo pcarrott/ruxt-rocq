@@ -72,9 +72,10 @@ Theorem type_ctx_refutation γ Γ Δ f xs e τs τ vs P Q ξ :
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ Err ξ, Q ⌉ → 
   (* Pre (P) implies that values vs are of input type τs *)
   ⊨ (P →ₕ [∗ₜ vs [⊲] boxes τs]) →
-  (* ... *)
+  (* Then, if Q is a satisfiable assertion, ... *)
   sat Q →
-  (* ... *)
+  (* ... the declared function types Δ are not valid wrt the function
+     implementations γ *)
   ¬ valid_types γ Δ.
 Proof.
   intros HFimpl HFtype HenvS Hrule HPtype HQsat Hvalid.
