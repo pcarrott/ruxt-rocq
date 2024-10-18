@@ -56,13 +56,14 @@ Fixpoint hprop (h : heap) (a : asrt) : Prop :=
   | AFreed l => h = {[l := Freed]}
   | AStar a1 a2 => ∃ h1 h2, h = h1 ∪ h2 ∧ h1 ##ₘ h2 ∧ hprop h1 a1 ∧ hprop h2 a2
   end.
-(* Entailment *)
-Definition hentails (P Q : asrt) : Prop :=
+(* Satisfiability *)
+Definition hmodels (P Q : asrt) : Prop :=
   ∀ h, hprop h P → ∃ h', h' ⊆ h ∧ hprop h' Q.
-Notation "H1 ⊨ H2" := (hentails H1 H2) (at level 50).
+Notation "H1 ⊨ H2" := (hmodels H1 H2) (at level 50).
 Definition hassert (P : asrt) : Prop :=
   ∀ h, hprop h P.
 Notation "⊨ H" := (hassert H) (at level 50).
+Definition sat (P : asrt) : Prop := ¬ ⊨ (P →ₕ FALSE).
 
 
 (*** Properties ***)
