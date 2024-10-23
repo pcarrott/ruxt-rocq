@@ -60,16 +60,18 @@ Proof.
   (* The goal follows from the principle of agreement *)
   by eapply principle_of_agreement.
 Qed.
-Theorem type_ctx_refutation γ Γ Δ f xs e τs τ vs P Q ξ :
+Theorem type_ctx_refutation γ Γ Δ f xs e τs τ vs P Q ε :
   (* Function f exists in context γ with params xs and body e *)
   γ !! f = Some {(xs) e} →
   (* Function f is declared in context Δ with input types τs and output type τ *)
   Δ !! f = Some {τs ↣ τ} →
   (* Derived UX specs Γ are valid wrt implementation context γ *)
   γ ≺ₛ Γ →
-  (* Under context Γ, erroneous post (Err ξ, Q) is derived from pre (P)
-     by replacing occurrences of xs in e with concrete values vs *)
-  Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ Err ξ, Q ⌉ → 
+  (* Under context Γ, post (ε, Q) is derived from pre (P) by
+     replacing occurrences of xs in e with concrete values vs *)
+  Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉ → 
+  (* Termination is not successful *)
+  (¬ ∃ v, ε = Ok v) →
   (* Pre (P) implies that values vs are of input type τs *)
   ⊨ (P →ₕ [∗ₜ vs [⊲] boxes τs]) →
   (* Then, if Q is a satisfiable assertion, ... *)
@@ -78,7 +80,7 @@ Theorem type_ctx_refutation γ Γ Δ f xs e τs τ vs P Q ξ :
      implementations γ *)
   ¬ valid_types γ Δ.
 Proof.
-  intros HFimpl HFtype HenvS Hrule HPtype HQsat Hvalid.
+  intros HFimpl HFtype HenvS Hrule Hε HPtype HQsat Hvalid.
   eapply type_ctx_validity in Hvalid; try done. apply HQsat.
-  by intros h [?[?[?[?[?[[_ ?] _]]]]]]%Hvalid.
+  intros h [?[?[?[?[?[[_ ?] _]]]]]]%Hvalid. by apply Hε; eexists.
 Qed.
