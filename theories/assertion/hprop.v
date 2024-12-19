@@ -55,9 +55,9 @@ Fixpoint hprop (h : heap) (a : asrt) : Prop :=
   | AImplies a1 a2 => hprop h a1 → hprop h a2
   | AExists P => ∃ x, hprop h (P x)
   | AEmp => h = ∅
-  | ASingle l v => h = {[l := LangVal v]}
-  | AUninit l => h = {[l := Poison]}
-  | AFreed l => h = {[l := Freed]}
+  | ASingle l v => h = {[l.1 := BVal 1 {[l.2 := HVal v]}]} ∧ l.2 = 0
+  | AUninit l => h = {[l.1 := BVal 1 {[l.2 := Poison]}]} ∧ l.2 = 0
+  | AFreed l => h = {[l.1 := Freed]} ∧ l.2 = 0
   | AStar a1 a2 => ∃ h1 h2, h = h1 ∪ h2 ∧ h1 ##ₘ h2 ∧ hprop h1 a1 ∧ hprop h2 a2
   end.
 (* Satisfiability *)

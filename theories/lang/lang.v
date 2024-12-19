@@ -35,7 +35,7 @@ Inductive expr :=
 | Let (x : binder) (e1 e2 : expr)
 | Choice (e1 e2 : expr)
 | Alloc (t : term)
-| Free (t1 t2 : term)
+| Free (t : term)
 | Store (t1 t2 : term)
 | Load (t : term)
 | Call (f : string) (ts : list term).
@@ -149,9 +149,8 @@ Proof.
           GenLeaf (inr (inr (inr (inr (inr ts)))))
         ]
       | Alloc t => GenLeaf (inr (inr (inl (inl (inl t)))))
-      | Free t1 t2 => GenNode 3 [
-          GenLeaf (inr (inr (inl (inl (inr (inl t1))))));
-          GenLeaf (inr (inr (inl (inl (inr (inr t2))))))
+      | Free t => GenNode 3 [
+          GenLeaf (inr (inr (inl (inl (inr t)))))
         ]
       | Store t1 t2 => GenNode 4 [
           GenLeaf (inr (inr (inl (inr (inl (inl t1))))));
@@ -174,9 +173,8 @@ Proof.
         ] => Call f ts
       | GenLeaf (inr (inr (inl (inl (inl t))))) => Alloc t
       | GenNode 3 [
-          GenLeaf (inr (inr (inl (inl (inr (inl t1))))));
-          GenLeaf (inr (inr (inl (inl (inr (inr t2))))))
-        ] => Free t1 t2
+          GenLeaf (inr (inr (inl (inl (inr t)))))
+        ] => Free t
       | GenNode 4 [
           GenLeaf (inr (inr (inl (inr (inl (inl t1))))));
           GenLeaf (inr (inr (inl (inr (inl (inr t2))))))
@@ -287,7 +285,7 @@ Fixpoint subst_in_expr (x : string) (t : term) (e : expr) : expr :=
                     (if decide (bx = BNamed x) then e2 else subst_in_expr x t e2)
   | Choice e1 e2 => Choice (subst_in_expr x t e1) (subst_in_expr x t e2)
   | Alloc T => Alloc (subst_in_term x t T)
-  | Free T1 T2 => Free (subst_in_term x t T1) (subst_in_term x t T2)
+  | Free T => Free (subst_in_term x t T)
   | Store T1 T2 => Store (subst_in_term x t T1) (subst_in_term x t T2)
   | Load T => Load (subst_in_term x t T)
   | Call f Ts => Call f (subst_in_term x t <$> Ts)
@@ -329,7 +327,7 @@ Fixpoint closed_expr' (X : list string) (e : expr) : Prop :=
   | Let x e1 e2 => closed_expr' X e1 ∧ closed_expr' (x :b: X) e2
   | Choice e1 e2 => closed_expr' X e1 ∧ closed_expr' X e2
   | Alloc t => closed_term' X t
-  | Free t1 t2 => closed_term' X t1 ∧ closed_term' X t2
+  | Free t => closed_term' X t
   | Store t1 t2 => closed_term' X t1 ∧ closed_term' X t2
   | Load t => closed_term' X t
   | Call _ ts => Forall (closed_term' X) ts

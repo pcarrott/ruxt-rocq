@@ -44,7 +44,7 @@ Inductive ty_rule : type_ctx → (list typing) → expr → (val → list typing
 | T_Val Δ v' τ :
   Δ ∣ [v' ⊲ τ] ⊢ Pure (PVal v') ⊣ λ v, [v ⊲ τ]
 | T_Alloc Δ :
-  Δ ∣ [] ⊢ Alloc ⊣ λ vl, [vl ⊲ empty]
+  Δ ∣ [] ⊢ Alloc (TInt 1) ⊣ λ vl, [vl ⊲ empty]
 | T_Free Δ vl τ :
   Δ ∣ [vl ⊲ own τ] ⊢ Free (TVal vl) ⊣ λ _, []
 | T_Store Δ v vl τ1 τ2 :
@@ -157,100 +157,177 @@ Proof.
     destruct H𝕋 as [hv [htrue [-> [Hdisj [Hv Htrue]]]]].
     by do 2 eexists.
   + inversion Hstep; subst. eexists. split; first done.
+    replace n with 1 by (inversion H0; lia).
     do 2 eexists. repeat split; first apply insert_union_singleton_l;
       first by apply map_disjoint_singleton_l, not_elem_of_dom.
-    rewrite hiter_singleton. by left; eexists.
+    rewrite hiter_singleton. simpl; replace l.2 with 0 by done. by left.
   + destruct H𝕋 as [hl [htrue [-> [Hdisj [Hl Htrue]]]]].
     inversion Hstep; subst.
     - eexists. split; first done. do 2 eexists. repeat split;
         first apply map_union_id_l; first apply map_disjoint_empty_l.
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
-      rewrite hiter_singleton in Hl. apply own_loc in Hl as [hv []].
-      assert (Some hv = Some Freed); last congruence.
-      assert ((hl ∪ htrue) !! l = Some Freed)
+      rewrite hiter_singleton in Hl. by apply own_loc in Hl as [? []].
+    - replace vl with (VLoc l) in * by (simpl in *; congruence).
+      rewrite hiter_singleton in Hl. apply own_loc in Hl as [? [hv]].
+      assert ((hl ∪ htrue) !! l.1 = Some Freed)
         as Hfalse%lookup_union_Some_inv_l by assumption;
         last by eapply map_disjoint_Some_l.
-      by rewrite <- Hfalse.
+      replace (hl !! l.1) with (Some (BVal 1 {[l.2 := hv]})) in Hfalse. congruence.
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
-      rewrite hiter_singleton in Hl. apply own_loc in Hl as [hv []].
-      assert (l ∉ dom (hl ∪ htrue)) as Hfalse by assumption.
+      rewrite hiter_singleton in Hl. apply own_loc in Hl as [? []].
+      assert (l.1 ∉ dom (hl ∪ htrue)) as Hfalse by assumption.
       exfalso. apply Hfalse, elem_of_dom. eexists.
       by apply lookup_union_Some_l.
+    - replace vl with (VLoc l) in * by (simpl in *; congruence).
+      rewrite hiter_singleton in Hl. apply own_loc in Hl as [? [hv]].
+      assert ((hl ∪ htrue) !! l.1 = Some (BVal sz bh))
+        as HSome%lookup_union_Some_inv_l by assumption;
+        last by eapply map_disjoint_Some_l.
+      replace (hl !! l.1) with (Some (BVal 1 {[l.2 := hv]})) in HSome.
+      inversion HSome; subst. assert (i = 0) as -> by lia.
+      replace l.2 with 0 in * by done.
+      assert (0 ∉ dom ({[0 := hv]} : block_heap)) as Hfalse by done.
+      exfalso. apply Hfalse, elem_of_dom. eexists.
+      by apply lookup_singleton.
   + destruct H𝕋 as [h𝕋 [htrue [-> [Hdisj [H𝕋 Htrue]]]]].
     inversion Hstep; subst.
     - eexists. split; first done.
-      replace v2 with v in * by (simpl in *; congruence).
+      replace v0 with v in * by (simpl in *; congruence).
       replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_cons in H𝕋. destruct H𝕋 as [hl [hτ2 [-> [Hdisj2 [Hl Hτ2]]]]].
       rewrite hiter_singleton in Hτ2.
       destruct τ1 as [τ1|].
-      * destruct Hl as [prev [hl' [hτ1 [-> [Hdisj1 [-> Hτ1]]]]]].
-        apply map_disjoint_union_l in Hdisj2 as [].
+      * destruct Hl as [prev [hl' [hτ1 [-> [Hdisj1 [[->] Hτ1]]]]]].
+
+        apply map_disjoint_union_l in Hdisj2 as []. unfold hstore.
         rewrite (insert_union_l _ htrue), (insert_union_l _ hτ2), (insert_union_l _ hτ1).
-        replace (<[l:=LangVal v]> ({[l := LangVal prev]}))
-          with ({[l := LangVal v]} : heap) by (symmetry; apply insert_singleton).
+        replace (<[l.1 := BVal sz (bupdate bh l.2 v)]> ({[l.1 := BVal 1 {[l.2 := HVal prev]}]}))
+          with ({[l.1 := BVal sz (bupdate bh l.2 v)]} : heap) by (symmetry; apply insert_singleton).
         rewrite <- (assoc_L (∪) _ hτ1), (map_union_comm hτ1); last done.
         rewrite (assoc_L (∪)), <- (assoc_L (∪) _ hτ1).
         repeat apply map_disjoint_union_l in Hdisj as [Hdisj].
         do 2 eexists. repeat split; first by
           rewrite map_disjoint_union_r, 2 map_disjoint_union_l;
           by repeat split; try rewrite map_disjoint_singleton_l in *.
-        rewrite hiter_singleton. do 3 eexists. by repeat split;
-          first rewrite map_disjoint_singleton_l in *.
-      * apply own_uninit in Hl as [prev [-> ?]].
+        rewrite hiter_singleton. do 3 eexists.
+        split; first done.
+        split.
+        { 
+          apply map_disjoint_singleton_l in H0.
+          by apply map_disjoint_singleton_l.
+        }
+        
+        repeat (split; last done). unfold bupdate.
+        apply lookup_union_Some_inv_l in H3; last by eapply map_disjoint_singleton_l.
+        apply lookup_union_Some_inv_l in H3; last by eapply map_disjoint_singleton_l.
+        apply lookup_union_Some_inv_l in H3; last by eapply map_disjoint_singleton_l.
+        apply lookup_singleton_Some in H3 as [_ Heq].
+        inversion Heq; subst.
+        by replace {[l.2 := HVal v; l.2 := HVal prev]}
+          with ({[l.2 := HVal v]} : block_heap)
+          by (symmetry; apply insert_singleton).
+      * apply own_uninit in Hl as [? [prev ->]]. unfold hstore.
         rewrite (insert_union_l _ htrue), (insert_union_l _ hτ2).
-        replace (<[l:=LangVal v]> ({[l := prev]}))
-          with ({[l := LangVal v]} : heap) by (symmetry; apply insert_singleton).
+        replace (<[l.1 := BVal sz (bupdate bh l.2 v)]> ({[l.1 := BVal 1 {[l.2 := prev]}]}))
+          with ({[l.1 := BVal sz (bupdate bh l.2 v)]} : heap) by (symmetry; apply insert_singleton).
         repeat apply map_disjoint_union_l in Hdisj as [Hdisj].
         do 2 eexists. repeat split; 
           first by rewrite map_disjoint_union_l;
           split; first rewrite map_disjoint_singleton_l in *.
-        rewrite hiter_singleton. do 3 eexists. by repeat split;
-          first rewrite map_disjoint_singleton_l in *.
+        rewrite hiter_singleton. do 3 eexists.
+        split; first done.
+        split.
+        { 
+          apply map_disjoint_singleton_l in Hdisj2.
+          by apply map_disjoint_singleton_l.
+        }
+        
+        repeat (split; last done). unfold bupdate.
+        apply lookup_union_Some_inv_l in H3; last by eapply map_disjoint_singleton_l.
+        apply lookup_union_Some_inv_l in H3; last by eapply map_disjoint_singleton_l.
+        apply lookup_singleton_Some in H3 as [_ Heq].
+        inversion Heq; subst.
+        by replace {[l.2 := HVal v; l.2 := prev]}
+          with ({[l.2 := HVal v]} : block_heap)
+          by (symmetry; apply insert_singleton).
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_cons in H𝕋. destruct H𝕋 as [hl [hτ [-> [Hdisj' [Hl _]]]]].
-      apply own_loc in Hl as [hv [HSome ?]].
-      assert (hl !! l = Some Freed); last congruence.
+      apply own_loc in Hl as [? [hv HSome]].
+      assert (hl !! l.1 = Some Freed); last congruence.
       rewrite <- (lookup_union_l hl hτ), <- (lookup_union_l _ htrue); first done;
         first apply map_disjoint_union_l in Hdisj as [];
         by eapply (map_disjoint_Some_l hl).
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_cons in H𝕋. destruct H𝕋 as [hl [hτ [-> [Hdisj' [Hl _]]]]].
-      apply own_loc in Hl as [hv [HSome ?]].
-      assert (l ∉ dom (hl ∪ hτ ∪ htrue)) as Hfalse by assumption.
+      apply own_loc in Hl as [? [hv HSome]].
+      assert (l.1 ∉ dom (hl ∪ hτ ∪ htrue)) as Hfalse by assumption.
       exfalso. apply Hfalse, elem_of_dom. eexists.
       by repeat apply lookup_union_Some_l.
+    - replace vl with (VLoc l) in * by (simpl in *; congruence).
+      rewrite hiter_cons in H𝕋. destruct H𝕋 as [hl [hτ [-> [Hdisj' [Hl _]]]]].
+      apply own_loc in Hl as [? [hv HSome]].
+      apply map_disjoint_union_l in Hdisj as [].
+      assert ((hl ∪ hτ ∪ htrue) !! l.1 = Some (BVal sz bh))
+        as Hfalse%lookup_union_Some_inv_l%lookup_union_Some_inv_l by assumption;
+        try by eapply (map_disjoint_Some_l hl).
+      replace (hl !! l.1) with (Some (BVal sz bh)) in HSome by done.
+      inversion HSome; subst.
+      exfalso. apply H7, elem_of_dom. eexists.
+      apply lookup_singleton.
   + destruct H𝕋 as [h𝕋 [htrue [-> [Hdisj [H𝕋 Htrue]]]]].
     inversion Hstep; subst.
     - eexists. split; first done.
       replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_singleton in H𝕋. destruct H𝕋 as
-        [? [hl [hτ [-> [Hdisj' [-> Hτ]]]]]].
+        [? [hl [hτ [-> [Hdisj' [[->] Hτ]]]]]].
       do 2 eexists. repeat split; first done.
       rewrite hiter_cons, (map_union_comm _ hτ); last done. do 2 eexists.
       apply map_disjoint_union_l in Hdisj as [].
-      assert (({[l := LangVal x]} ∪ hτ ∪ htrue) !! l = Some (LangVal v))
+      assert (({[l.1 := BVal 1 {[l.2 := HVal x]}]} ∪ hτ ∪ htrue) !! l.1 = Some (BVal sz bh))
         as Hfalse%lookup_union_Some_inv_l%lookup_union_Some_inv_l by assumption;
         try by eapply map_disjoint_singleton_l.
       apply lookup_singleton_Some in Hfalse as [_ Heq].
-      repeat split; first done; first by inversion Heq; subst.
-      rewrite hiter_singleton. right. by eexists.
+      repeat split; first done.
+      * inversion Heq; subst; clear Heq.
+        apply lookup_singleton_Some in H4 as [? Heq].
+        by inversion Heq; subst.
+      * rewrite hiter_singleton. right. by eexists.
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_singleton in H𝕋. destruct H𝕋 as
-        [? [hl [hτ [-> [Hdisj' [-> Hτ]]]]]].
+        [? [hl [hτ [-> [Hdisj' [[->] Hτ]]]]]].
       apply map_disjoint_union_l in Hdisj as [].
-      assert (({[l := LangVal x]} ∪ hτ ∪ htrue) !! l = Some hv)
+      assert (({[l.1 := BVal 1 {[l.2 := HVal x]}]} ∪ hτ ∪ htrue) !! l.1 = Some Freed)
         as Hfalse%lookup_union_Some_inv_l%lookup_union_Some_inv_l by assumption;
         try by eapply map_disjoint_singleton_l.
-      assert (hv = Freed ∨ hv = Poison) as [|] by assumption;
-        by apply lookup_singleton_Some in Hfalse as [_ <-].
+      apply lookup_singleton_Some in Hfalse as []. congruence.
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_singleton in H𝕋. destruct H𝕋 as
-        [v' [hl [hτ [-> [Hdisj' [-> Hτ]]]]]].
+        [v' [hl [hτ [-> [Hdisj' [[->] Hτ]]]]]].
       apply map_disjoint_union_l in Hdisj as [].
-      assert (l ∉ dom ({[l := LangVal v']} ∪ hτ ∪ htrue)) as Hfalse by assumption.
+      assert (({[l.1 := BVal 1 {[l.2 := HVal v']}]} ∪ hτ ∪ htrue) !! l.1 = Some (BVal sz bh))
+        as Hfalse%lookup_union_Some_inv_l%lookup_union_Some_inv_l by assumption;
+        try by eapply map_disjoint_singleton_l.
+      apply lookup_singleton_Some in Hfalse as [? Hfalse].
+      inversion Hfalse; subst.
+      by apply lookup_singleton_Some in H4 as [].
+    - replace vl with (VLoc l) in * by (simpl in *; congruence).
+      rewrite hiter_singleton in H𝕋. destruct H𝕋 as
+        [v' [hl [hτ [-> [Hdisj' [[->] Hτ]]]]]].
+      apply map_disjoint_union_l in Hdisj as [].
+      assert (l.1 ∉ dom ({[l.1 := BVal 1 {[l.2 := HVal v']}]} ∪ hτ ∪ htrue)) as Hfalse by assumption.
       exfalso. apply Hfalse, elem_of_dom. eexists.
       apply lookup_union_Some_l, lookup_union_Some_l, lookup_singleton.
+    - replace vl with (VLoc l) in * by (simpl in *; congruence).
+      rewrite hiter_singleton in H𝕋. destruct H𝕋 as
+        [v' [hl [hτ [-> [Hdisj' [[->] Hτ]]]]]].
+      apply map_disjoint_union_l in Hdisj as [].
+      assert (({[l.1 := BVal 1 {[l.2 := HVal v']}]} ∪ hτ ∪ htrue) !! l.1 = Some (BVal sz bh))
+        as Hfalse%lookup_union_Some_inv_l%lookup_union_Some_inv_l by assumption;
+        try by eapply map_disjoint_singleton_l.
+      apply lookup_singleton_Some in Hfalse as [? Hfalse].
+      inversion Hfalse; subst.
+      exfalso. apply H4, elem_of_dom. eexists.
+      apply lookup_singleton.
   + destruct H𝕋 as [h𝕋𝕍 [htrue [-> [Hdisj [H𝕋𝕍 Htrue]]]]].
     apply hiter_app in H𝕋𝕍 as [h𝕋 [h𝕍 [-> [Hdisj𝕋 [H𝕋%own_typings H𝕍]]]]].
     apply map_disjoint_union_l in Hdisj as [].

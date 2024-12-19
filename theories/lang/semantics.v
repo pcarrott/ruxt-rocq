@@ -9,36 +9,33 @@ Record fun_impl := mk_fun_impl { params : list string; body : expr }.
 Notation "{ ( xs ) e }" := (mk_fun_impl xs e).
 Definition impl_ctx := gmap string fun_impl.
 (* Heaps *)
-Inductive heap_value := LangVal (v : val) | Poison | Freed.
-Definition heap := gmap loc heap_value.
+Inductive heap_value := HVal (v : val) | Poison.
+Definition block_heap := gmap nat heap_value.
+Inductive block_value := BVal (sz : nat) (bh : block_heap) | Freed.
+Definition heap := gmap block block_value.
 (* Heap operations *)
-Fixpoint hreplicate (hv : heap_value) (h : heap) (l : loc) (n : nat) : heap :=
-  match n with O => h | S n => <[ l +ₗ n := hv ]> (hreplicate hv h l n) end.
-Notation halloc := (hreplicate Poison).
-Notation hfree := (hreplicate Freed).
+Fixpoint breplicate (hv : heap_value) (n : nat) : block_heap :=
+  match n with O => ∅ | S n => <[ n := hv ]> (breplicate hv n) end.
+Notation balloc := (breplicate Poison).
+Definition bupdate (bh : block_heap) (i : nat) (v : val) : block_heap :=
+  <[ i := HVal v ]> bh.
+Definition hupdate (h : heap) (b : block) (bv : block_value) : heap :=
+  <[ b := bv ]>h.
+Notation hstore h b sz bh := (hupdate h b (BVal sz bh)).
+Notation hfree h b := (hupdate h b Freed).
 (* Properties *)
-Lemma hreplicate_disj hv h h' l n :
-  hreplicate hv h l n ##ₘ h' ↔ h ##ₘ h' ∧ ∀ i, i < n → l +ₗ i ∉ dom h'.
+Lemma hupdate_disj h h' b bv :
+  hupdate h b bv ##ₘ h' ↔ h ##ₘ h' ∧ b ∉ dom h'.
 Proof.
-  induction n as [|n IH].
-  + split.
-    - simpl; intros. by split; last (intros i Hi; lia).
-    - simpl. by intros [].
-  + split.
-    - simpl in *; intros [?%not_elem_of_dom Hdisj]%map_disjoint_insert_l.
-      apply IH in Hdisj as [? Hnin]. split; first done. intros i Hi.
-      by assert (i = n ∨ i < n) as [->|] by lia; last (apply Hnin; lia).
-    - simpl in *; intros [Hdisj Hnin]. apply map_disjoint_insert_l.
-      split; first (apply not_elem_of_dom, Hnin; lia).
-      apply IH. split; first done. intros i Hi.
-      apply Hnin; lia.
+  unfold hupdate; split.
+  + by intros [?%not_elem_of_dom Hdisj]%map_disjoint_insert_l.
+  + intros [Hdisj Hnin]. apply map_disjoint_insert_l.
+    by split; first apply not_elem_of_dom.
 Qed.
-Lemma hreplicate_union hv h h' b n :
-  hreplicate hv h b n ##ₘ h' → hreplicate hv h b n ∪ h' = hreplicate hv (h ∪ h') b n.
+Lemma hupdate_union h h' b bv :
+  hupdate h b bv ##ₘ h' → hupdate h b bv ∪ h' = hupdate (h ∪ h') b bv.
 Proof.
-  intros Hdisj. induction n as [|n IH]; first done. simpl in *.
-  apply map_disjoint_insert_l in Hdisj as [_ <-%IH].
-  symmetry; apply insert_union_l.
+  intros Hdisj. symmetry; apply insert_union_l.
 Qed.
 
 
@@ -104,39 +101,68 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Choice γ ei e1 e2 h h' ε :
   γ ⊢ ⟨ h | ei ⟩ ⇓ ⟨ h' | ε ⟩ → (ei = e1 ∨ ei = e2) →
   γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
-| O_Alloc γ t h l n :
+| O_Alloc γ t h h' l n :
   ⌊ t ⌋ₜ = Some (VInt (Z.of_nat n)) →
-  l.2 = 0 → (∀ i, i < n → l +ₗ i ∉ dom h) →
-  γ ⊢ ⟨ h | Alloc t ⟩ ⇓ ⟨ halloc h l n | Ok (VLoc l) ⟩
-| O_Free γ t1 t2 h l n v :
-  ⌊ t1 ⌋ₜ = Some (VLoc l) → ⌊ t2 ⌋ₜ = Some (VInt (Z.of_nat n)) →
-  (∀ i, i < n → h !! (l +ₗ i) = Some v ∧ v ≠ Freed) →
-  γ ⊢ ⟨ h | Free t1 t2 ⟩ ⇓ ⟨ hfree h l n | Ok VUnit ⟩
-| O_FreeErr γ t1 t2 h l n i :
-  ⌊ t1 ⌋ₜ = Some (VLoc l) → ⌊ t2 ⌋ₜ = Some (VInt (Z.of_nat n)) →
-  i < n → h !! (l +ₗ i) = Some Freed →
-  γ ⊢ ⟨ h | Free t1 t2 ⟩ ⇓ ⟨ h | Err ECrash ⟩
-| O_FreeMiss γ t1 t2 h l n i :
-  ⌊ t1 ⌋ₜ = Some (VLoc l) → ⌊ t2 ⌋ₜ = Some (VInt (Z.of_nat n)) →
-  i < n → l +ₗ i ∉ dom h →
-  γ ⊢ ⟨ h | Free t1 t2 ⟩ ⇓ ⟨ h | Miss (MLoc (l +ₗ i)) ⟩
-| O_Store γ t1 t2 h l v1 v2 :
-  ⌊ t1 ⌋ₜ = Some (VLoc l) → h !! l = Some v1 → v1 ≠ Freed → ⌊ t2 ⌋ₜ = Some v2 →
-  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ <[l:=LangVal v2]>h | Ok VUnit⟩
+  l.1 ∉ dom h → l.2 = 0 →
+  h' = hstore h l.1 n (balloc n) →
+  γ ⊢ ⟨ h | Alloc t ⟩ ⇓ ⟨ h' | Ok (VLoc l) ⟩
+| O_Free γ t h h' l sz bh :
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  h !! l.1 = Some (BVal sz bh) → l.2 = 0 → (∀ i, i < sz → i ∈ dom bh) →
+  h' = hfree h l.1 →
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h' | Ok VUnit ⟩
+| O_FreeErr γ t h l :
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  l.2 ≠ 0 →
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ECrash ⟩
+| O_FreeErrBlock γ t h l :
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  h !! l.1 = Some Freed →
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ECrash ⟩
+| O_FreeMiss γ t h l :
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  l.1 ∉ dom h →
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+| O_FreeMissBlock γ t h l sz bh i :
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  h !! l.1 = Some (BVal sz bh) → i < sz → i ∉ dom bh →
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss (MLoc (l +ₗ i)) ⟩
+| O_Store γ t1 t2 h h' l sz bh v :
+  ⌊ t1 ⌋ₜ = Some (VLoc l) → ⌊ t2 ⌋ₜ = Some v →
+  h !! l.1 = Some (BVal sz bh) → l.2 ∈ dom bh →
+  h' = hstore h l.1 sz (bupdate bh l.2 v) →
+  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h' | Ok VUnit⟩
 | O_StoreErr γ t1 t2 h l :
-  ⌊ t1 ⌋ₜ = Some (VLoc l) → h !! l = Some Freed →
+  ⌊ t1 ⌋ₜ = Some (VLoc l) →
+  h !! l.1 = Some Freed →
   γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Err ECrash ⟩
 | O_StoreMiss γ t1 t2 h l :
-  ⌊ t1 ⌋ₜ = Some (VLoc l) → l ∉ dom h →
+  ⌊ t1 ⌋ₜ = Some (VLoc l) →
+  l.1 ∉ dom h →
   γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
-| O_Load γ t h l v :
-  ⌊ t ⌋ₜ = Some (VLoc l) → h !! l = Some (LangVal v) →
+| O_StoreMissBlock γ t1 t2 h l sz bh :
+  ⌊ t1 ⌋ₜ = Some (VLoc l) →
+  h !! l.1 = Some (BVal sz bh) → l.2 ∉ dom bh →
+  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+| O_Load γ t h l sz bh v :
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  h !! l.1 = Some (BVal sz bh) → bh !! l.2 = Some (HVal v) →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Ok v ⟩
-| O_LoadErr γ t h l hv :
-  ⌊ t ⌋ₜ = Some (VLoc l) → h !! l = Some hv → hv = Freed ∨ hv = Poison →
+| O_LoadErr γ t h l :
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  h !! l.1 = Some Freed →
+  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Err ECrash ⟩
+| O_LoadErrBlock γ t h l sz bh :
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  h !! l.1 = Some (BVal sz bh) → bh !! l.2 = Some Poison →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Err ECrash ⟩
 | O_LoadMiss γ t h l :
-  ⌊ t ⌋ₜ = Some (VLoc l) → l ∉ dom h →
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  l.1 ∉ dom h →
+  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+| O_LoadMissBlock γ t h l sz bh :
+  ⌊ t ⌋ₜ = Some (VLoc l) →
+  h !! l.1 = Some (BVal sz bh) → l.2 ∉ dom bh →
   γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
 | O_Call γ f xs e ts h h' ε :
   γ !! f = Some {(xs) e} → γ ⊢ ⟨ h | e⌊ts[//]xs⌋ₜ ⟩ ⇓ ⟨ h' | ε ⟩ →
@@ -152,7 +178,7 @@ Theorem frame_addition γ h e h' ε :
   ∀ hF γF, h' ##ₘ hF → γ ##ₘ γF →
   (γ ∪ γF ⊢ ⟨ h ∪ hF | e ⟩ ⇓ ⟨ h' ∪ hF | ε ⟩ ∧ h ##ₘ hF) ∨
   (∃ m, ε = Miss m ∧ (
-    (∃ l, m = MLoc l ∧ l ∈ dom hF) ∨ (∃ f, m = MFun f ∧ f ∈ dom γF)
+    (∃ l, m = MLoc l ∧ l.1 ∈ dom hF) ∨ (∃ f, m = MFun f ∧ f ∈ dom γF)
   )).
 Proof.
   intros Hstep.
@@ -169,53 +195,58 @@ Proof.
     left. by split; first apply O_LetMiss.
   + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
     left. by split; first eapply O_Choice.
-  + left. rewrite hreplicate_union; last done.
-    apply hreplicate_disj in Hframe' as [? Hnin].
-    split; first eapply O_Alloc; try done.
-    intros i Hi. specialize (Hnin i Hi). set_solver.
-  + left. rewrite hreplicate_union; last done.
-    apply hreplicate_disj in Hframe' as [].
+  + left. subst. rewrite hupdate_union; last done.
+    apply hupdate_disj in Hframe' as [? Hnin].
+    split; first eapply O_Alloc; try done. set_solver.
+  + left. subst. rewrite hupdate_union; last done.
+    apply hupdate_disj in Hframe' as [].
     split; first eapply O_Free; try done.
-    assert (∀ i, i < n → h !! (l +ₗ i) = Some v ∧ v ≠ Freed)
-      as Hlookup by assumption.
-    intros i Hi. specialize (Hlookup i Hi) as [].
-    split; last done. apply lookup_union_Some_raw; by left.
-  + left. split; last done. eapply O_FreeErr; try done.
     apply lookup_union_Some_raw; by left.
-  + destruct (hF !! (l +ₗ i)) as [hv|] eqn:Hlookup.
+  + left. split; last done. by eapply O_FreeErr.
+  + left. split; last done. eapply O_FreeErrBlock; try done.
+    apply lookup_union_Some_raw; by left.
+  + destruct (hF !! l.1) as [hv|] eqn:Hlookup.
     - right. eexists. split; first done. left. eexists. split; first done.
       apply elem_of_dom. by eexists.
     - left. split; last done. eapply O_FreeMiss; try done.
-      assert (l +ₗ i ∉ dom h) as Hnin by assumption.
+      assert (l.1 ∉ dom h) as Hnin by assumption.
       intros Hin%dom_union. apply Hnin.
       apply elem_of_union in Hin as []; first done.
       rewrite <- not_elem_of_dom in Hlookup. by exfalso.
-  + apply map_disjoint_insert_l in Hframe' as [_ Hframe].
+  + left. split; last done. eapply O_FreeMissBlock; try done.
+    apply lookup_union_Some_raw; by left.
+  + subst. unfold hupdate in *.
+    apply map_disjoint_insert_l in Hframe' as [_ Hframe].
     rewrite <- (insert_union_l h).
     left. split; last done. eapply O_Store; try done.
     apply lookup_union_Some_raw; by left.
   + left. split; last done. eapply O_StoreErr; try done.
     apply lookup_union_Some_raw; by left.
-  + destruct (hF !! l) as [hv|] eqn:Hlookup.
+  + destruct (hF !! l.1) as [hv|] eqn:Hlookup.
     - right. eexists. split; first done. left. eexists. split; first done.
       apply elem_of_dom. by eexists.
     - left. split; last done. eapply O_StoreMiss; try done.
-      assert (l ∉ dom h) as Hnin by assumption.
-      intros Hin%dom_union. apply Hnin.
+      intros Hin%dom_union.
       apply elem_of_union in Hin as []; first done.
       rewrite <- not_elem_of_dom in Hlookup. by exfalso.
+  + left. split; last done. eapply O_StoreMissBlock; try done.
+    apply lookup_union_Some_raw; by left.
   + left. split; last done. eapply O_Load; try done.
     apply lookup_union_Some_raw; by left.
   + left. split; last done. eapply O_LoadErr; try done.
     apply lookup_union_Some_raw; by left.
-  + destruct (hF !! l) as [hv|] eqn:Hlookup.
+  + left. split; last done. eapply O_LoadErrBlock; try done.
+    apply lookup_union_Some_raw; by left.
+  + destruct (hF !! l.1) as [hv|] eqn:Hlookup.
     - right. eexists. split; first done. left. eexists. split; first done.
       apply elem_of_dom. by eexists.
     - left. split; last done. eapply O_LoadMiss; try done.
-      assert (l ∉ dom h) as Hnin by assumption.
+      assert (l.1 ∉ dom h) as Hnin by assumption.
       intros Hin%dom_union. apply Hnin.
       apply elem_of_union in Hin as []; first done.
       rewrite <- not_elem_of_dom in Hlookup. by exfalso.
+  + left. split; last done. eapply O_LoadMissBlock; try done.
+    apply lookup_union_Some_raw; by left.
   + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
     left. split; last done. eapply O_Call; try done.
     apply lookup_union_Some_raw; by left.
@@ -233,7 +264,7 @@ Theorem frame_subtraction γ h e h' ε :
   ∃ hs', hs' ##ₘ hF ∧ (
     (γs ⊢ ⟨ hs | e ⟩ ⇓ ⟨ hs' | ε ⟩ ∧ h' = hs' ∪ hF) ∨
     (∃ m, γs ⊢ ⟨ hs | e ⟩ ⇓ ⟨ hs' | Miss m ⟩ ∧ (
-      (∃ l, m = MLoc l ∧ l ∈ dom hF) ∨ (∃ f, m = MFun f ∧ f ∈ dom γF)
+      (∃ l, m = MLoc l ∧ l.1 ∈ dom hF) ∨ (∃ f, m = MFun f ∧ f ∈ dom γF)
     ))
   ).
 Proof.
@@ -269,53 +300,39 @@ Proof.
     destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
     - left. by split; first eapply O_Choice.
     - right. eexists. by split; first eapply O_Choice.
-  + subst. assert (halloc hs l n ##ₘ hF) as Hdisj.
-    { apply hreplicate_disj. set_solver. }
+  + assert (hstore hs l.1 n (balloc n) ##ₘ hF) as Hdisj.
+    { apply hupdate_disj. set_solver. }
     eexists. split; first done. left.
-    split; last by rewrite hreplicate_union.
-    by apply O_Alloc; last set_solver.
-  + subst. assert (
-      (∀ i, i < n → hs !! (l +ₗ i) = Some v ∧ v ≠ Freed)
-      ∨
-      (∃ i, i < n ∧ l +ₗ i ∉ dom hs)
-    ) as [Hlookup|[i [Hi Hnin]]].
-    {
-      assert (∀ i, i < n → (hs ∪ hF) !! (l +ₗ i) = Some v ∧ v ≠ Freed)
-        as Hlookup by assumption. clear -Hlookup.
-      induction n as [|n IH]; first by left; lia.
-      assert (∀ i, i < n → (hs ∪ hF) !! (l +ₗ i) = Some v ∧ v ≠ Freed) as Hlookup'.
-      { intros i Hi. apply Hlookup. lia. }
-      specialize (IH Hlookup') as [Hlookup''|[i [Hi Hnin]]].
-      + specialize (Hlookup n) as [Hlookup ?]; first lia.
-        apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-        - left. intros i Hi. by assert (i = n ∨ i < n) as [<-|] by lia; last apply Hlookup''.
-        - right. eexists. split; last by apply not_elem_of_dom. lia.
-      + right. eexists. split; last done. lia.
-    }
-    - assert (∀ i : nat, i < n → l +ₗ i ∉ dom hF).
-      {
-        intros i Hi. apply Hlookup in Hi as [].
-        by eapply not_elem_of_dom, map_disjoint_Some_l.
-      }
-      eexists. split; first by eapply hreplicate_disj.
-      left. split; first by eapply O_Free.
-      rewrite hreplicate_union; first done. by apply hreplicate_disj.
-    - eexists. split; first done.
-      right. eexists. split; first by eapply O_FreeMiss.
-      left. eexists. split; first done.
-      rewrite (elem_of_dom hF). eexists.
-      eapply lookup_union_Some_inv_r; last by apply not_elem_of_dom.
-      assert (∀ i, i < n → (hs ∪ hF) !! (l +ₗ i) = Some v ∧ v ≠ Freed)
-        as Hlookup by assumption; by apply Hlookup.
-  + eexists. split; first done.
-    subst; assert (_ !! (l +ₗ i) = Some _) as Hlookup by done.
+    split; last by (subst; rewrite hupdate_union).
+    by eapply O_Alloc; try done; last set_solver.
+  + subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - left. by split; first eapply O_FreeErr.
+    - assert (hF !! l.1 = None) by by eapply map_disjoint_Some_l in Hframe.
+      eexists. split. eapply hupdate_disj;
+        first by split; last apply not_elem_of_dom.
+      left. split; first by eapply O_Free.
+      symmetry; apply hupdate_union, hupdate_disj;
+        first by split; last apply not_elem_of_dom.
+    - eexists. split; first done.
+      right. eexists. split; first by eapply O_FreeMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
+    left. split; last done. by eapply O_FreeErr.
+  + eexists. split; first done.
+    subst; assert (_ !! l.1 = Some _) as Hlookup by done.
+    apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
+    - left. by split; first eapply O_FreeErrBlock.
     - right. eexists. split; first by eapply O_FreeMiss, not_elem_of_dom.
       left. eexists. split; first done. by eapply map_union_dom; first eexists.
   + eexists. split; first done.
     left. split; last done. eapply O_FreeMiss; try done. set_solver.
-  + subst; assert (_ !! l = Some _) as Hlookup by done.
+  + eexists. split; first done.
+    subst; assert (_ !! l.1 = Some _) as Hlookup by done.
+    apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
+    - left. by split; first eapply O_FreeMissBlock.
+    - right. eexists. split; first by eapply O_FreeMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - eexists. split; first by eapply map_disjoint_Some_insert.
       left. split; last by rewrite <- insert_union_l. by eapply O_Store.
@@ -323,7 +340,7 @@ Proof.
       right. eexists. split; first by apply O_StoreMiss, not_elem_of_dom.
       left. eexists. split; first done. by eapply map_union_dom; first eexists.
   + eexists. split; first done.
-    subst; assert (_ !! l = Some _) as Hlookup by done.
+    subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_StoreErr.
     - right. eexists. split; first by apply O_StoreMiss, not_elem_of_dom.
@@ -331,19 +348,37 @@ Proof.
   + eexists. split; first done.
     left. split; last done. apply O_StoreMiss; first done. set_solver.
   + eexists. split; first done.
-    subst; assert (_ !! l = Some _) as Hlookup by done.
+    subst; assert (_ !! l.1 = Some _) as Hlookup by done.
+    apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
+    - left. by split; first eapply O_StoreMissBlock.
+    - right. eexists. split; first by eapply O_StoreMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
+    subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_Load.
     - right. eexists. split; first by apply O_LoadMiss, not_elem_of_dom.
       left. eexists. split; first done. by eapply map_union_dom; first eexists.
   + eexists. split; first done.
-    subst; assert (_ !! l = Some _) as Hlookup by done.
+    subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_LoadErr.
     - right. eexists. split; first by apply O_LoadMiss, not_elem_of_dom.
       left. eexists. split; first done. by eapply map_union_dom; first eexists.
   + eexists. split; first done.
+    subst; assert (_ !! l.1 = Some _) as Hlookup by done.
+    apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
+    - left. by split; first eapply O_LoadErrBlock.
+    - right. eexists. split; first by eapply O_LoadMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
     left. split; last done. apply O_LoadMiss; first done. set_solver.
+  + eexists. split; first done.
+    subst; assert (_ !! l.1 = Some _) as Hlookup by done.
+    apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
+    - left. by split; first eapply O_LoadMissBlock.
+    - right. eexists. split; first by eapply O_LoadMiss, not_elem_of_dom.
+      left. eexists. split; first done. by eapply map_union_dom; first eexists.
   + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
     subst; assert (_ !! f = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].

@@ -31,24 +31,23 @@ Notation boxes τs := (box <$> τs).
 
 (* Properties *)
 Lemma own_uninit h l :
-  hprop h ⟦empty⟧([VLoc l]) → ∃ v, h = {[l:=v]} ∧ v ≠ Freed.
+  hprop h ⟦empty⟧([VLoc l]) → l.2 = 0 ∧ ∃ hv, h = {[l.1:=BVal 1 {[l.2 := hv]}]}.
 Proof.
-  intros [|[]]; by eexists.
+  intros [[->]|[?[->]]]; by split; last eexists.
 Qed.
 Lemma own_box h l τ :
-  hprop h ⟦box τ⟧([VLoc l]) → ∃ v, h !! l = Some (LangVal v).
+  hprop h ⟦box τ⟧([VLoc l]) → l.2 = 0 ∧ ∃ hv, h !! l.1 = Some (BVal 1 {[l.2 := hv]}).
 Proof.
-  intros [? [h1 [h2 [-> [Hdisj [Hl Hτ]]]]]].
-  simpl in Hl; subst. eexists.
+  intros [? [h1 [h2 [-> [Hdisj [[->] Hτ]]]]]].
+  split; first done. eexists.
   rewrite (lookup_union_l _ h2); first apply lookup_singleton.
   by eapply map_disjoint_singleton_l.
 Qed.
 Lemma own_loc h l τ :
-  hprop h ⟦own τ⟧([VLoc l]) → ∃ v, h !! l = Some v ∧ v ≠ Freed.
+  hprop h ⟦own τ⟧([VLoc l]) → l.2 = 0 ∧ ∃ hv, h !! l.1 = Some (BVal 1 {[l.2 := hv]}).
 Proof.
   intros Hown. destruct τ.
-  + apply own_box in Hown as []. eexists.
-    by split.
-  + apply own_uninit in Hown as [? [-> ?]]. eexists.
-    by split; first apply lookup_singleton.
+  + by apply own_box in Hown as [].
+  + apply own_uninit in Hown as [?[? ->]].
+    by split; last (eexists; apply lookup_singleton).
 Qed.

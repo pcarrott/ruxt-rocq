@@ -31,7 +31,7 @@ Qed.
 
 (* Proof rules *)
 Definition ux_frameable (ε : exit) (R : asrt) : Prop :=
-  match ε with Miss (MLoc l) => ∀ h, hprop h R → l ∉ dom h | _ => True end.
+  match ε with Miss (MLoc l) => ∀ h, hprop h R → l.1 ∉ dom h | _ => True end.
 Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" (at level 50).
 Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_Value Γ v :
@@ -62,7 +62,7 @@ Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
   Γ ⊢ ⌈ P ⌉ ei ⌈ ε, Q ⌉ → (ei = e1 ∨ ei = e2) →
   Γ ⊢ ⌈ P ⌉ Choice e1 e2 ⌈ ε, Q ⌉
 | S_Alloc Γ l :
-  Γ ⊢ ⌈ EMP ⌉ Alloc ⌈ Ok (VLoc l), l ↦? ⌉
+  Γ ⊢ ⌈ EMP ⌉ Alloc (TInt 1) ⌈ Ok (VLoc l), l ↦? ⌉
 | S_Free Γ l v :
   Γ ⊢ ⌈ l ↦ v ⌉ Free (TLoc l) ⌈ Ok VUnit, l ↦∅ ⌉
 | S_FreeUninit Γ l :
@@ -195,49 +195,50 @@ Proof.
     split; first done. intros h' HQ.
     apply Hux in HQ as [h [HP Hstep]].
     eexists. by split; last eapply O_Choice.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. by split; last apply O_Alloc.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by do 2 eexists.
-    replace {[l := Freed]} with (<[l := Freed]>{[l := LangVal v]} : heap)
-      by (subst; eapply insert_singleton).
-    by eapply O_Free; first done; first apply lookup_insert.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by do 2 eexists.
-    replace {[l := Freed]} with (<[l := Freed]>{[l := Poison]} : heap)
-      by (subst; eapply insert_singleton).
-    by eapply O_Free; first done; first apply lookup_insert.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by eexists.
-    by eapply O_FreeErr; last apply lookup_insert.
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done. rewrite Hi.
+    by apply (O_Alloc _ _ _ _ _ 1).
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done.
+    eapply O_Free; try done; first apply lookup_insert.
+    intros. apply dom_singleton, elem_of_singleton. lia.
+    unfold hupdate. symmetry. apply insert_singleton.
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done.
+    eapply O_Free; try done; first apply lookup_insert.
+    intros. apply dom_singleton, elem_of_singleton. lia.
+    unfold hupdate. symmetry. apply insert_singleton.
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done.
+    by eapply O_FreeErrBlock; last apply lookup_insert.
   + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
     by eapply O_FreeMiss; last apply not_elem_of_dom.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by do 2 eexists.
-    replace {[l := LangVal v]} with (<[l := LangVal v]>{[l := LangVal v']} : heap)
-      by (subst; eapply insert_singleton).
-    by eapply O_Store; first done; first apply lookup_insert.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by do 2 eexists.
-    replace {[l := LangVal v]} with (<[l := LangVal v]>{[l := Poison]} : heap)
-      by (subst; eapply insert_singleton).
-    by eapply O_Store; first done; first apply lookup_insert.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by eexists.
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done.
+    eapply O_Store; try done; try (apply elem_of_dom; eexists); try apply lookup_insert.
+    unfold hupdate, bupdate. replace {[l.2 := HVal v; l.2 := HVal v']} with
+      ({[l.2 := HVal v]} : block_heap); by symmetry; apply insert_singleton.
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done.
+    eapply O_Store; try done; try (apply elem_of_dom; eexists); try apply lookup_insert.
+    unfold hupdate, bupdate. replace {[l.2 := HVal v; l.2 := Poison]} with
+      ({[l.2 := HVal v]} : block_heap); by symmetry; apply insert_singleton.
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done.
     by eapply O_StoreErr; last apply lookup_insert.
   + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by eexists.
+    eexists. split; first done.
     by eapply O_StoreMiss; last apply not_elem_of_dom.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by do 2 eexists.
-    by eapply O_Load; last apply lookup_insert.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by eexists.
-    by eapply O_LoadErr; first done; first apply lookup_insert; last right.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
-    eexists. split; first by eexists.
-    by eapply O_LoadErr; first done; first apply lookup_insert; last left.
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done.
+    by eapply O_Load; try apply lookup_insert.
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done.
+    by eapply O_LoadErrBlock; try apply lookup_insert.
+  + split; first done. intros h' [? Hi]; subst.
+    eexists. split; first done.
+    by eapply O_LoadErr; try apply lookup_insert.
   + split; first done. intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
     by eapply O_LoadMiss; last apply not_elem_of_dom.
