@@ -16,18 +16,6 @@ Notation update spec f Γ := (alter (cons spec) f Γ).
 Definition spec_ctx_subseteq (Γ Γ' : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆+ s'.
 Notation "Γ [⊆] Γ'" := (spec_ctx_subseteq Γ Γ') (at level 50).
-(* Properties *)
-Lemma spec_ctx_subseteq_update Γ f spec :
-  Γ [⊆] update spec f Γ.
-Proof.
-  intros f' s Hsome. destruct (decide (f = f')) as [->|].
-  + exists (spec :: s). 
-    split.
-    - rewrite (lookup_alter _ Γ). by replace (Γ !! f') with (Some s).
-    - rewrite submseteq_cons_r. by left.
-  + exists s. split; last done.
-    by rewrite (lookup_alter_ne _ Γ).
-Qed.
 
 (* Proof rules *)
 Definition ux_frameable (ε : exit) (R : asrt) : Prop :=
@@ -104,11 +92,6 @@ Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
   Γ ⊢ ⌈ P ⌉ Call f ts ⌈ ε , Q ⌉
 where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (ux_rule Γ P e ε Q).
 (* Derived rules *)
-Lemma S_Cons_update Γ e P Q ε f spec :
-  Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → update spec f Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
-Proof.
-  eapply S_Cons; first apply spec_ctx_subseteq_update. all: by intros ??.
-Qed.
 Lemma S_AssumeFalse Γ P ε Q :
   Γ ⊢ ⌈ P ⌉ Assume TFalse ⌈ ε, Q ⌉ → False.
 Proof.
@@ -117,9 +100,9 @@ Proof.
   all: try by apply IHrule. by apply IHrule1.
 Qed.
 
-(* Environment validity *)
+(* Well-formed specification contexts *)
 Reserved Notation "γ ≺ₛ Γ" (at level 50).
-Inductive ux_env_rule : impl_ctx → spec_ctx → Prop :=
+Inductive wf_spec_ctx : impl_ctx → spec_ctx → Prop :=
 | S_Empty :
   ∅ ≺ₛ ∅
 | S_Imp γ γ' Γ Γ' f xs e :
@@ -131,7 +114,7 @@ Inductive ux_env_rule : impl_ctx → spec_ctx → Prop :=
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ →
   Γ' = update ⌈(vs) P | ε, Q⌉ f Γ →
   γ ≺ₛ Γ'
-where "γ ≺ₛ Γ" := (ux_env_rule γ Γ).
+where "γ ≺ₛ Γ" := (wf_spec_ctx γ Γ).
 
 
 (*** Soundness ***)
@@ -142,14 +125,14 @@ Definition valid_exit (ε : exit) : Prop :=
 Definition ux_triple (γ : impl_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
   valid_exit ε ∧ ∀ h', hprop h' Q →
   ∃ h, hprop h P ∧ γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩.
-Definition valid_specs (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
+Definition valid_spec_ctx (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∀ vs P Q ε, ⌈(vs) P | ε, Q⌉ ∈ s →
   ∃ xs e, γ !! f = Some {(xs) e} ∧ ux_triple γ (e⌊vs[//]xs⌋) P Q ε.
 Definition ux_spec (Γ : spec_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
-  ∀ γ, valid_specs γ Γ → ux_triple γ e P Q ε.
+  ∀ γ, valid_spec_ctx γ Γ → ux_triple γ e P Q ε.
 (* Properties *)
-Lemma env_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
-  valid_specs γ Γ → Γ' [⊆] Γ → valid_specs γ Γ'.
+Lemma spec_ctx_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
+  valid_spec_ctx γ Γ → Γ' [⊆] Γ → valid_spec_ctx γ Γ'.
 Proof.
   intros Hval Hsub f s' Hsome' vs P Q ε Hin'.
   specialize (Hsub _ _ Hsome') as [s [Hsome Hsub]].
@@ -255,7 +238,7 @@ Proof.
       eexists. by split; first left.
     - specialize (Hux2 _ HQ2) as [h2 [HP2 Hstep2]].
       eexists. by split; first right.
-  + eapply env_inclusion in Hval; last done.
+  + eapply spec_ctx_inclusion in Hval; last done.
     apply IHrule in Hval as [Hε Hux].
     split; first done. intros h' HQ.
     assert (⊨ (Q →ₕ Q')) as HQimp by assumption; apply HQimp in HQ.
@@ -272,9 +255,9 @@ Proof.
     apply Hux in HQ as [h [HP Hstep]].
     eexists. by split; last (subst; eapply O_Call).
 Qed.
-(* Soundness of environment validity *)
+(* Soundness of specification contexts *)
 Theorem env_soundness γ Γ :
-  γ ≺ₛ Γ → valid_specs γ Γ.
+  γ ≺ₛ Γ → valid_spec_ctx γ Γ.
 Proof.
   intros rule; induction rule; subst.
   + done.
