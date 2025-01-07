@@ -116,6 +116,10 @@ Inductive wf_spec_ctx : impl_ctx → spec_ctx → Prop :=
   γ ≺ₛ Γ'
 where "γ ≺ₛ Γ" := (wf_spec_ctx γ Γ).
 
+(* Well-formed UX specifications *)
+Definition wf_fun_spec (γ : impl_ctx) f vs P Q ε :=
+  ∃ Γ s, γ ≺ₛ Γ ∧ Γ !! f = Some s ∧ ⌈(vs) P | ε, Q⌉ ∈ s.
+
 
 (*** Soundness ***)
 
@@ -125,9 +129,11 @@ Definition valid_exit (ε : exit) : Prop :=
 Definition ux_triple (γ : impl_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
   valid_exit ε ∧ ∀ h', hprop h' Q →
   ∃ h, hprop h P ∧ γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩.
+Definition valid_fun_spec (γ : impl_ctx) f vs P Q ε :=
+  ∃ xs e, γ !! f = Some {(xs) e} ∧ ux_triple γ (e⌊vs[//]xs⌋) P Q ε.
 Definition valid_spec_ctx (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∀ vs P Q ε, ⌈(vs) P | ε, Q⌉ ∈ s →
-  ∃ xs e, γ !! f = Some {(xs) e} ∧ ux_triple γ (e⌊vs[//]xs⌋) P Q ε.
+  valid_fun_spec γ f vs P Q ε.
 Definition ux_spec (Γ : spec_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
   ∀ γ, valid_spec_ctx γ Γ → ux_triple γ e P Q ε.
 (* Properties *)
@@ -279,4 +285,11 @@ Proof.
     specialize (ux_soundness _ _ _ _ _ Hrule _ IHrule) as Hux.
     apply elem_of_cons in Hin as [Heq|]; last by eapply IHrule.
     inversion Heq; subst. by do 2 eexists.
+Qed.
+(* Soundness of well-formed UX specifications *)
+Lemma fun_spec_soundness γ f vs P Q ε :
+  wf_fun_spec γ f vs P Q ε → valid_fun_spec γ f vs P Q ε.
+Proof.
+  intros [Γ [s [Himpl [HenvS Hspec]]]].
+  by eapply env_soundness.
 Qed.
