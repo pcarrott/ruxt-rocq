@@ -25,8 +25,8 @@ Definition try_refute (γ : impl_ctx) (Δ : type_ctx) Σ f vs (σ : option summa
     Δ !! f = Some {τs ↣ τ} ∧
     (* P is a valid precondition *)
     wf_asrt Σ τs vs P ∧
-    (* [ε: Q] is a derived postcondition *)
-    wf_fun_spec γ f vs P Q ε ∧
+    (* [ε: Q] is a valid postcondition *)
+    wf_fun_spec γ f vs P Q ε ∧ sat Q ∧
     match σ with
     | Some σ => τ = ty σ ∧ Q = post σ ∧ ε = Ok (ret σ)
     | None => ¬ ∃ v, ε = Ok v
@@ -73,5 +73,12 @@ Section Adequacy.
 
   Theorem adequacy Σ f vs :
     wf_summ_ctx γ Δ Σ → try_refute γ Δ Σ f vs None → has_unsafe_trace.
-  Proof. Admitted.
+  Proof.
+    intros Hsumm Hrefute. exists Σ. split.
+    - by apply summ_ctx_soundness.
+    - destruct Hrefute as [τs [τ [P [Q [ε [Htype [Hpre [Hspec [Hsat Hnok]]]]]]]]].
+      exists f, vs. do 5 eexists. repeat split; try done.
+      + by eapply fun_spec_soundness.
+      + by apply asrt_soundness.
+  Qed.
 End Adequacy.
