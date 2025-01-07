@@ -29,8 +29,8 @@ Proof.
   by eapply principle_of_agreement.
 Qed.
 
-(* Validity of function type specification contexts *)
-Theorem type_ctx_validity γ Γ Δ f xs e τs τ vs P Q ε :
+(* Reasoning principles for type specification contexts *)
+Theorem principle_of_validity γ Γ Δ f xs e τs τ vs P Q ε :
   (* Function f exists in context γ with params xs and body e *)
   γ !! f = Some {(xs) e} →
   (* Function f is declared in context Δ with input types τs and output type τ *)
@@ -60,7 +60,7 @@ Proof.
   (* The goal follows from the principle of agreement *)
   by eapply principle_of_agreement.
 Qed.
-Theorem type_ctx_refutation γ Γ Δ f xs e τs τ vs P Q ε :
+Theorem principle_of_refutation γ Γ Δ f xs e τs τ vs P Q ε :
   (* Function f exists in context γ with params xs and body e *)
   γ !! f = Some {(xs) e} →
   (* Function f is declared in context Δ with input types τs and output type τ *)
@@ -81,6 +81,6 @@ Theorem type_ctx_refutation γ Γ Δ f xs e τs τ vs P Q ε :
   ¬ valid_types γ Δ.
 Proof.
   intros HFimpl HFtype HenvS Hrule Hε HPtype HQsat Hvalid.
-  eapply type_ctx_validity in Hvalid; try done. apply HQsat.
+  eapply principle_of_validity in Hvalid; try done. apply HQsat.
   intros h [?[?[?[?[?[[_ ?] _]]]]]]%Hvalid. by apply Hε; eexists.
 Qed.
