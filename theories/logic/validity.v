@@ -44,7 +44,7 @@ Theorem principle_of_validity γ Γ Δ f xs e τs τ vs P Q ε :
   ⊨ (P →ₕ [∗ₜ vs [⊲] boxes τs]) →
   (* Then, assuming that the declared function types Δ
      are valid wrt the function implementations γ, ... *)
-  valid_types γ Δ →
+  valid_type_ctx γ Δ →
   (* ... the derived post (Q) implies that output value v is of type τ
      and executing the call does not terminate in an error *)
   ⊨ (Q →ₕ (∃ₕ v, (⌞ ε = Ok v ⌟ ∗ [∗ₜ [v ⊲ box τ]]))).
@@ -55,7 +55,7 @@ Proof.
   apply ux_soundness in Hrule as Hux.
   specialize (Hux _ Hspecs) as [].
   (* Assume type validity and obtain the OX triple *)
-  intros HenvT. apply HenvT in HFtype as [? [? [HFimpl' Hox]]].
+  intros HenvT. eapply HenvT in HFtype as [? [? [HFimpl' Hox]]].
   rewrite HFimpl' in HFimpl; inversion HFimpl; subst.
   (* The goal follows from the principle of agreement *)
   by eapply principle_of_agreement.
@@ -78,7 +78,7 @@ Theorem principle_of_refutation γ Γ Δ f xs e τs τ vs P Q ε :
   sat Q →
   (* ... the declared function types Δ are not valid wrt the function
      implementations γ *)
-  ¬ valid_types γ Δ.
+  ¬ valid_type_ctx γ Δ.
 Proof.
   intros HFimpl HFtype HenvS Hrule Hε HPtype HQsat Hvalid.
   eapply principle_of_validity in Hvalid; try done. apply HQsat.

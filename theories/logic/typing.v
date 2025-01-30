@@ -69,11 +69,13 @@ where "Δ ∣ 𝕋 ⊢ e ⊣ λ𝕌" := (ty_rule Δ 𝕋 e λ𝕌).
 Definition ox_triple (γ : impl_ctx) (e : expr) (P : asrt) (λQ : val → asrt) : Prop :=
   ∀ h, hprop h P → ∀ h' ε, γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
   ∃ v, ε = Ok v ∧ hprop h' (λQ v).
-Definition valid_types (γ : impl_ctx) (Δ : type_ctx) : Prop :=
-  ∀ f τs τ, Δ !! f = Some {τs ↣ τ} → ∃ xs e, γ !! f = Some {(xs) e} ∧
-  ∀ vs, ox_triple γ (e⌊vs[//]xs⌋) ([∗ₜ vs [⊲] boxes τs]) (λ v, [∗ₜ [v ⊲ box τ]]).
+Definition valid_fun_type (γ : impl_ctx) f vs τs τ :=
+  ∃ xs e, γ !! f = Some {(xs) e} ∧ ox_triple γ (e⌊vs[//]xs⌋) ([∗ₜ vs [⊲] boxes τs]) (λ v, [∗ₜ [v ⊲ box τ]]).
+Definition valid_type_ctx (γ : impl_ctx) (Δ : type_ctx) : Prop :=
+  ∀ f τs τ, Δ !! f = Some {τs ↣ τ} →
+  ∀ vs, valid_fun_type γ f vs τs τ.
 Definition ty_spec (Δ : type_ctx) (e : expr) (𝕋 : list typing) (λ𝕌 : val → list typing) : Prop :=
-  ∀ γ, valid_types γ Δ → ox_triple γ e ([∗ₜ 𝕋]) (λ v, [∗ₜ λ𝕌 v]).
+  ∀ γ, valid_type_ctx γ Δ → ox_triple γ e ([∗ₜ 𝕋]) (λ v, [∗ₜ λ𝕌 v]).
 
 (* Soundness of typing rules *)
 Theorem ty_soundness Δ 𝕋 e λ𝕌 :
@@ -368,10 +370,10 @@ Proof.
     - by specialize (IHrule _ Hval _ H𝕋' _ _ Hstep') as
         [? [Hfalse [h𝕌' [htrue' [-> [Hdisj𝕌' [H𝕌' Htrue']]]]]]].
   + inversion Hstep; subst.
-    - specialize (Hval _ _ _ H) as [? [? [Hsome' Hox]]].
+    - specialize (Hval _ _ _ H vs) as [? [? [Hsome' Hox]]].
       assert (γ !! f = Some { (xs) e}) as Hsome by assumption.
       rewrite Hsome' in Hsome; inversion Hsome; subst.
       by eapply Hox.
-    - specialize (Hval _ _ _ H) as [xs [e [Hsome _]]].
+    - specialize (Hval _ _ _ H vs) as [xs [e [Hsome _]]].
       by rewrite Hsome in *.
 Qed.
