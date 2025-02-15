@@ -17,37 +17,48 @@ Definition subseteq (Γ Γ' : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆ s'.
 Notation "Γ [⊆] Γ'" := (subseteq Γ Γ') (at level 50).
 Definition union (Γ1 Γ2 : spec_ctx) :=
-  let f := λ s1 s2,
-    match s1, s2 with
-    | Some s1, Some s2 => Some (s1 ++ s2)
-    | Some s, None | None, Some s => Some s
-    | None, None => None
-    end
-  in
-  merge f Γ1 Γ2.
+  union_with (λ s1 s2, Some (s1 ++ s2)) Γ1 Γ2.
 Notation "Γ1 [∪] Γ2" := (union Γ1 Γ2) (at level 50).
 (* Properties *)
 Lemma spec_ctx_lookup_union_app Γ1 Γ2 f s1 s2 :
   Γ1 !! f = Some s1 → Γ2 !! f = Some s2 → (Γ1 [∪] Γ2) !! f = Some (s1 ++ s2).
 Proof.
-Admitted.
+  intros. apply lookup_union_with_Some. do 2 right; by do 2 eexists.
+Qed.
 Lemma spec_ctx_lookup_union_l Γ1 Γ2 f s :
   (Γ1 [∪] Γ2) !! f = Some s → Γ2 !! f = None → Γ1 !! f = Some s.
 Proof.
-Admitted.
+  intros [[]|[[_ HSome]|[?[s2[_ [HSome _]]]]]]%lookup_union_with_Some HNone; try done.
+  + by replace (Γ2 !! f) with (Some s) in HNone.
+  + by replace (Γ2 !! f) with (Some s2) in HNone.
+Qed.
 Lemma spec_ctx_lookup_union_r Γ1 Γ2 f s :
   (Γ1 [∪] Γ2) !! f = Some s → Γ1 !! f = None → Γ2 !! f = Some s.
 Proof.
-Admitted.
+  intros [[]|[[_ HSome]|[s1[?[HSome _]]]]]%lookup_union_with_Some HNone; try done.
+  + by replace (Γ1 !! f) with (Some s) in HNone.
+  + by replace (Γ1 !! f) with (Some s1) in HNone.
+Qed.
 Lemma spec_ctx_subseteq_refl Γ : Γ [⊆] Γ.
 Proof.
-Admitted.
+  intros f s HSome. by eexists.
+Qed.
 Lemma spec_ctx_subseteq_union_r Γ1 Γ2 : Γ1 [⊆] (Γ1 [∪] Γ2).
 Proof.
-Admitted.
+  intros f s HSome. destruct (Γ2 !! f) eqn:Hopt.
+  + eexists. split; first by apply spec_ctx_lookup_union_app.
+    by apply list_subseteq_app_l.
+  + eexists. split; last done.
+    apply lookup_union_with_Some. by left.
+Qed.
 Lemma spec_ctx_subseteq_union_l Γ1 Γ2 : Γ1 [⊆] (Γ2 [∪] Γ1).
 Proof.
-Admitted.
+  intros f s HSome. destruct (Γ2 !! f) eqn:Hopt.
+  + eexists. split; first by apply spec_ctx_lookup_union_app.
+    by apply list_subseteq_app_r.
+  + eexists. split; last done.
+    apply lookup_union_with_Some. by right; left.
+Qed.
 
 (* Proof rules *)
 Definition ux_frameable (ε : exit) (R : asrt) : Prop :=
