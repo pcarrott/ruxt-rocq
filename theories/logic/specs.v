@@ -27,27 +27,25 @@ Definition union (Γ1 Γ2 : spec_ctx) :=
   merge f Γ1 Γ2.
 Notation "Γ1 [∪] Γ2" := (union Γ1 Γ2) (at level 50).
 (* Properties *)
-Lemma spec_ctx_union_comm Γ1 Γ2 : Γ1 [∪] Γ2 = Γ2 [∪] Γ1.
-Proof.
-Admitted.
-Lemma spec_ctx_union_id_l Γ : ∅ [∪] Γ = Γ.
-Proof.
-Admitted.
-Lemma spec_ctx_union_id_r Γ : Γ [∪] ∅ = Γ.
-Proof.
-Admitted.
 Lemma spec_ctx_lookup_union_app Γ1 Γ2 f s1 s2 :
   Γ1 !! f = Some s1 → Γ2 !! f = Some s2 → (Γ1 [∪] Γ2) !! f = Some (s1 ++ s2).
 Proof.
 Admitted.
-Lemma spec_ctx_lookup_union_left Γ Γ' f s :
-  (Γ [∪] Γ') !! f = Some s → Γ' !! f = None → Γ !! f = Some s.
+Lemma spec_ctx_lookup_union_l Γ1 Γ2 f s :
+  (Γ1 [∪] Γ2) !! f = Some s → Γ2 !! f = None → Γ1 !! f = Some s.
+Proof.
+Admitted.
+Lemma spec_ctx_lookup_union_r Γ1 Γ2 f s :
+  (Γ1 [∪] Γ2) !! f = Some s → Γ1 !! f = None → Γ2 !! f = Some s.
 Proof.
 Admitted.
 Lemma spec_ctx_subseteq_refl Γ : Γ [⊆] Γ.
 Proof.
 Admitted.
-Lemma spec_ctx_subseteq_union Γ1 Γ2 Γ3 : Γ1 [⊆] Γ2 → Γ1 [⊆] (Γ2 [∪] Γ3).
+Lemma spec_ctx_subseteq_union_r Γ1 Γ2 : Γ1 [⊆] (Γ1 [∪] Γ2).
+Proof.
+Admitted.
+Lemma spec_ctx_subseteq_union_l Γ1 Γ2 : Γ1 [⊆] (Γ2 [∪] Γ1).
 Proof.
 Admitted.
 
@@ -126,18 +124,19 @@ Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
   Γ ⊢ ⌈ P ⌉ Call f ts ⌈ ε , Q ⌉
 where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (ux_rule Γ P e ε Q).
 (* Derived rules *)
-Lemma S_AssumeFalse Γ P ε Q :
-  Γ ⊢ ⌈ P ⌉ Assume TFalse ⌈ ε, Q ⌉ → False.
-Proof.
-  set (e := Assume TFalse). assert (e = Assume TFalse) as Heq by done.
-  intros rule; induction rule; inversion Heq.
-  all: try by apply IHrule. by apply IHrule1.
-Qed.
-Lemma S_EnvUnion Γ Γ' e P Q ε :
-  Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → (Γ [∪] Γ') ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
+Lemma S_EnvUnionL Γ1 Γ2 e P Q ε :
+  Γ1 ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → (Γ1 [∪] Γ2) ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
 Proof.
   intros Hrule. eapply S_Cons; last done.
-  + eapply spec_ctx_subseteq_union, spec_ctx_subseteq_refl.
+  + eapply spec_ctx_subseteq_union_r.
+  + apply himplies_refl.
+  + apply himplies_refl.
+Qed.
+Lemma S_EnvUnionR Γ1 Γ2 e P Q ε :
+  Γ2 ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → (Γ1 [∪] Γ2) ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
+Proof.
+  intros Hrule. eapply S_Cons; last done.
+  + eapply spec_ctx_subseteq_union_l.
   + apply himplies_refl.
   + apply himplies_refl.
 Qed.
@@ -400,10 +399,9 @@ Proof.
         ++ by eapply IHrule1.
         ++ by eapply IHrule2.
       * by eapply IHrule1;
-        first eapply spec_ctx_lookup_union_left.
+        first eapply spec_ctx_lookup_union_l.
     - by eapply IHrule2;
-      first eapply spec_ctx_lookup_union_left;
-      first rewrite spec_ctx_union_comm.
+      first eapply spec_ctx_lookup_union_r.
 Qed.
 (* Soundness of well-formed function specifications *)
 Theorem fun_spec_soundness γ f vs P Q ε :

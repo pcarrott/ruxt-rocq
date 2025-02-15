@@ -108,9 +108,8 @@ Proof.
     apply IHΣ' in Hsub as [v [e' [Hsafe' [Γ' [Henv' Hspec']]]]].
     exists v, (Let <> e e'); split; first done.
     exists (Γ [∪] Γ'); split; first by apply E_Union.
-    eapply S_Let; first by apply S_EnvUnion.
-    simpl. rewrite spec_ctx_union_comm. apply S_EnvUnion.
-    by apply S_CommPost, S_FrameEmpL, S_CommPre, S_Frame.
+    eapply S_Let; first by apply S_EnvUnionL.
+    by apply S_EnvUnionR, S_CommPost, S_FrameEmpL, S_CommPre, S_Frame.
 Qed.
 Lemma derivable_from_main Λ Σ τ Q ε :
   valid_summ_ctx Λ Σ → derivable_post Λ Σ τ Q ε →
@@ -127,9 +126,8 @@ Proof.
     apply (zip_with_inj TyOwn); try done; solve_length.
   + destruct Hfun as [Γs [s [HSome [Hs]]]].
     exists (Γ [∪] Γs). split; first by apply E_Union.
-    eapply S_Let; first by apply S_EnvUnion.
-    rewrite spec_ctx_union_comm. apply S_EnvUnion.
-    by eapply S_Call.
+    eapply S_Let; first by apply S_EnvUnionL.
+    by eapply S_EnvUnionR, S_Call.
 Qed.
 (* Soundness *)
 Lemma summ_ctx_soundness Λ Σ :
