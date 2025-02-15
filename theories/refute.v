@@ -43,7 +43,7 @@ Inductive wf_summ_ctx : library → summ_ctx → Prop :=
 Definition valid_input Σ 𝕋 P :=
   ∃ Σ', Σ' ⊆ Σ ∧ P = [∗ map post Σ', id] ∧ 𝕋 = map ret Σ' [⊲] map ty Σ'.
 (* Soundness *)
-Lemma input_soundness Σ 𝕋 P :
+Theorem input_soundness Σ 𝕋 P :
   wf_input Σ 𝕋 P → valid_input Σ 𝕋 P.
 Proof.
   intros Hinput. induction Hinput.
@@ -130,7 +130,7 @@ Proof.
     by eapply S_EnvUnionR, S_Call.
 Qed.
 (* Soundness *)
-Lemma summ_ctx_soundness Λ Σ :
+Theorem summ_ctx_soundness Λ Σ :
   wf_summ_ctx Λ Σ → valid_summ_ctx Λ Σ.
 Proof.
   intros Hsumm. induction Hsumm.
