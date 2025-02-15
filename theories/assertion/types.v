@@ -19,6 +19,8 @@ Notation "⟦ τ '⟧(' vs )" := (ty_own τ vs).
 Inductive typing := TyOwn (v : val) (τ : type).
 Notation "v ⊲ τ" := (TyOwn v τ) (at level 50).
 Notation "vs [⊲] τs" := (zip_with TyOwn vs τs) (at level 50).
+Global Instance TyOwn_eq_inj : Inj2 (=) (=) (=) (TyOwn).
+Proof. by injection 1. Qed.
 
 (* Type interpretation *)
 Definition own_type (t : typing) : asrt :=

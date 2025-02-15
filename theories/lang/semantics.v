@@ -80,7 +80,7 @@ Qed.
 (*** Operational semantics ***)
 
 (* Inference rules *)
-Reserved Notation "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩" (at level 50).
+Reserved Notation "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩".
 Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Pure γ p h v :
   ⌊ p ⌋ₚ = Some v →
@@ -176,7 +176,7 @@ where "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩" := (eval_expr γ h e h' ε).
 Theorem frame_addition γ h e h' ε :
   γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
   ∀ hF γF, h' ##ₘ hF → γ ##ₘ γF →
-  (γ ∪ γF ⊢ ⟨ h ∪ hF | e ⟩ ⇓ ⟨ h' ∪ hF | ε ⟩ ∧ h ##ₘ hF) ∨
+  ((γ ∪ γF) ⊢ ⟨ h ∪ hF | e ⟩ ⇓ ⟨ h' ∪ hF | ε ⟩ ∧ h ##ₘ hF) ∨
   (∃ m, ε = Miss m ∧ (
     (∃ l, m = MLoc l ∧ l.1 ∈ dom hF) ∨ (∃ f, m = MFun f ∧ f ∈ dom γF)
   )).

@@ -178,11 +178,21 @@ Proof.
 Qed.
 
 (* Weakening *)
-Lemma hempty_weaken P h : hprop h (P ∗ EMP →ₕ P).
-Proof. intros [h'[?[->[_[? ->]]]]]. by rewrite <- (map_union_id_r h'). Qed.
 Lemma hpure_weaken P Q h : hprop h (P ∗ ⌞ Q ⌟ →ₕ P).
 Proof. intros [h'[?[->[_[?[-> _]]]]]]. by rewrite <- (map_union_id_r h'). Qed.
 Lemma htrue_weaken P h : hprop h (TRUE ∗ P →ₕ TRUE).
 Proof. done. Qed.
 Lemma haffine_weaken P Q h : hprop h (⌜ P ⌝ ∗ Q →ₕ ⌜ P ⌝).
 Proof. intros [?[?[->[?[? _]]]]]%hstar_assoc. by do 2 eexists. Qed.
+
+(* Implication *)
+Lemma himplies_refl P : ⊨ (P →ₕ P).
+Proof. by intros h HP. Qed.
+Lemma hempty_left P : ⊨ (P ∗ EMP →ₕ P).
+Proof. intros h [h'[?[->[_[? ->]]]]]. by rewrite <- (map_union_id_r h'). Qed.
+Lemma hempty_right P : ⊨ (P →ₕ (P ∗ EMP)).
+Proof.
+  intros h HP. do 2 eexists. repeat split; last done.
+  + apply map_union_id_r.
+  + apply map_disjoint_empty_r.
+Qed.

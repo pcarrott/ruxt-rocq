@@ -10,17 +10,51 @@ From RUXt.assertion Require Export hprop.
 Record fun_spec := mk_fun_spec { vals : list val; pre : asrt; tag : exit; post : asrt }.
 Notation "⌈ ( vs ) P | ε , Q ⌉" := (mk_fun_spec vs P ε Q).
 Definition spec_ctx := gmap string (list fun_spec).
-(* Context updates *)
-Notation update spec f Γ := (alter (cons spec) f Γ).
-(* Subset relation *)
-Definition spec_ctx_subseteq (Γ Γ' : spec_ctx) : Prop :=
-  ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆+ s'.
-Notation "Γ [⊆] Γ'" := (spec_ctx_subseteq Γ Γ') (at level 50).
+(* Overloading definitions *)
+Definition empty (γ : impl_ctx) : spec_ctx := (λ _, []) <$> γ.
+Definition update spec f (Γ : spec_ctx) := (alter (cons spec) f Γ).
+Definition subseteq (Γ Γ' : spec_ctx) : Prop :=
+  ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆ s'.
+Notation "Γ [⊆] Γ'" := (subseteq Γ Γ') (at level 50).
+Definition union (Γ1 Γ2 : spec_ctx) :=
+  let f := λ s1 s2,
+    match s1, s2 with
+    | Some s1, Some s2 => Some (s1 ++ s2)
+    | Some s, None | None, Some s => Some s
+    | None, None => None
+    end
+  in
+  merge f Γ1 Γ2.
+Notation "Γ1 [∪] Γ2" := (union Γ1 Γ2) (at level 50).
+(* Properties *)
+Lemma spec_ctx_union_comm Γ1 Γ2 : Γ1 [∪] Γ2 = Γ2 [∪] Γ1.
+Proof.
+Admitted.
+Lemma spec_ctx_union_id_l Γ : ∅ [∪] Γ = Γ.
+Proof.
+Admitted.
+Lemma spec_ctx_union_id_r Γ : Γ [∪] ∅ = Γ.
+Proof.
+Admitted.
+Lemma spec_ctx_lookup_union_app Γ1 Γ2 f s1 s2 :
+  Γ1 !! f = Some s1 → Γ2 !! f = Some s2 → (Γ1 [∪] Γ2) !! f = Some (s1 ++ s2).
+Proof.
+Admitted.
+Lemma spec_ctx_lookup_union_left Γ Γ' f s :
+  (Γ [∪] Γ') !! f = Some s → Γ' !! f = None → Γ !! f = Some s.
+Proof.
+Admitted.
+Lemma spec_ctx_subseteq_refl Γ : Γ [⊆] Γ.
+Proof.
+Admitted.
+Lemma spec_ctx_subseteq_union Γ1 Γ2 Γ3 : Γ1 [⊆] Γ2 → Γ1 [⊆] (Γ2 [∪] Γ3).
+Proof.
+Admitted.
 
 (* Proof rules *)
 Definition ux_frameable (ε : exit) (R : asrt) : Prop :=
   match ε with Miss (MLoc l) => ∀ h, hprop h R → l.1 ∉ dom h | _ => True end.
-Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" (at level 50).
+Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉".
 Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_Value Γ v :
   Γ ⊢ ⌈ EMP ⌉ Pure (PVal v) ⌈ Ok v, EMP ⌉
@@ -99,24 +133,95 @@ Proof.
   intros rule; induction rule; inversion Heq.
   all: try by apply IHrule. by apply IHrule1.
 Qed.
+Lemma S_EnvUnion Γ Γ' e P Q ε :
+  Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → (Γ [∪] Γ') ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
+Proof.
+  intros Hrule. eapply S_Cons; last done.
+  + eapply spec_ctx_subseteq_union, spec_ctx_subseteq_refl.
+  + apply himplies_refl.
+  + apply himplies_refl.
+Qed.
+Lemma S_FrameEmpL Γ e P Q ε :
+  Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ ↔ Γ ⊢ ⌈ P ∗ EMP ⌉ e ⌈ ε, Q ⌉.
+Proof.
+  split; intros Hrule.
+  + eapply S_Cons; last done.
+    - apply spec_ctx_subseteq_refl.
+    - apply hempty_right.
+    - apply himplies_refl.
+  + eapply S_Cons; last done.
+    - apply spec_ctx_subseteq_refl.
+    - apply hempty_left.
+    - apply himplies_refl.
+Qed.
+Lemma S_FrameEmpR Γ e P Q ε :
+  Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ ↔ Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ∗ EMP ⌉.
+Proof.
+  split; intros Hrule.
+  + eapply S_Cons; last done.
+    - apply spec_ctx_subseteq_refl.
+    - apply himplies_refl.
+    - apply hempty_left.
+  + eapply S_Cons; last done.
+    - apply spec_ctx_subseteq_refl.
+    - apply himplies_refl.
+    - apply hempty_right.
+Qed.
+Lemma S_CommPre Γ e P Q R ε :
+  Γ ⊢ ⌈ P ∗ R ⌉ e ⌈ ε, Q ⌉ ↔ Γ ⊢ ⌈ R ∗ P ⌉ e ⌈ ε, Q ⌉.
+Proof.
+  split; intros Hrule.
+  + eapply S_Cons; last done.
+    - apply spec_ctx_subseteq_refl.
+    - intros h HPR. by apply hstar_comm.
+    - apply himplies_refl.
+  + eapply S_Cons; last done.
+    - apply spec_ctx_subseteq_refl.
+    - intros h HRP. by apply hstar_comm.
+    - apply himplies_refl.
+Qed.
+Lemma S_CommPost Γ e P Q R ε :
+  Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ∗ R ⌉ ↔ Γ ⊢ ⌈ P ⌉ e ⌈ ε, R ∗ Q ⌉.
+Proof.
+  split; intros Hrule.
+  + eapply S_Cons; last done.
+    - apply spec_ctx_subseteq_refl.
+    - apply himplies_refl.
+    - intros h HRQ. by apply hstar_comm.
+  + eapply S_Cons; last done.
+    - apply spec_ctx_subseteq_refl.
+    - apply himplies_refl.
+    - intros h HQR. by apply hstar_comm.
+Qed.
 
 (* Well-formed specification contexts *)
 Reserved Notation "γ ≺ₛ Γ" (at level 50).
 Inductive wf_spec_ctx : impl_ctx → spec_ctx → Prop :=
-| S_Empty :
+| E_Empty :
   ∅ ≺ₛ ∅
-| S_Imp γ γ' Γ Γ' f xs e :
+| E_Imp γ γ' Γ Γ' f xs e :
   γ ≺ₛ Γ → f ∉ dom γ →
   γ' = <[f := {(xs) e}]>γ → Γ' = <[f := []]>Γ →
   γ' ≺ₛ Γ'
-| S_Spec γ Γ Γ' P Q ε f xs e vs :
+| E_Spec γ Γ Γ' P Q ε f xs e vs :
   γ ≺ₛ Γ → γ !! f = Some {(xs) e} →
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ →
   Γ' = update ⌈(vs) P | ε, Q⌉ f Γ →
   γ ≺ₛ Γ'
+| E_Union γ Γ1 Γ2 :
+  γ ≺ₛ Γ1 → γ ≺ₛ Γ2 → γ ≺ₛ (Γ1 [∪] Γ2)
 where "γ ≺ₛ Γ" := (wf_spec_ctx γ Γ).
-
-(* Well-formed UX specifications *)
+(* Derive rules *)
+Lemma wf_empty_spec_ctx γ : γ ≺ₛ empty γ.
+Proof.
+  generalize γ. apply map_ind.
+  + apply E_Empty.
+  + intros f [] γ' HNone Henv.
+    eapply E_Imp; try done.
+    - by apply not_elem_of_dom.
+    - unfold empty; by rewrite fmap_insert.
+Qed.
+(* Well-formed function specifications *)
 Definition wf_fun_spec (γ : impl_ctx) f vs P Q ε :=
   ∃ Γ s, γ ≺ₛ Γ ∧ Γ !! f = Some s ∧ ⌈(vs) P | ε, Q⌉ ∈ s.
 
@@ -142,7 +247,7 @@ Lemma spec_ctx_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
 Proof.
   intros Hval Hsub f s' Hsome' vs P Q ε Hin'.
   specialize (Hsub _ _ Hsome') as [s [Hsome Hsub]].
-  by eapply Hval; last eapply elem_of_submseteq.
+  by eapply Hval; last eapply elem_of_subseteq.
 Qed.
 
 (* Soundness of proof rules *)
@@ -279,15 +384,29 @@ Proof.
     eapply frame_addition in Hstep as [[]|[[] [-> [[?[]]|[?[]]]]]];
       try done; first apply map_disjoint_empty_r.
     by apply map_disjoint_singleton_r, not_elem_of_dom.
-  + intros f' s HΓsome vs' P' Q' ε' Hin.
+  + intros f' s HΓsome vs' P' Q' ε' Hin. unfold update in HΓsome.
     apply lookup_alter_Some in HΓsome as [[<- [? [? ->]]]|[]]; last by eapply IHrule.
     assert (Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉) as Hrule by assumption.    
     specialize (ux_soundness _ _ _ _ _ Hrule _ IHrule) as Hux.
     apply elem_of_cons in Hin as [Heq|]; last by eapply IHrule.
     inversion Heq; subst. by do 2 eexists.
+  + intros f s HΓsome vs P Q ε Hin.
+    unfold valid_spec_ctx in *.
+    destruct (Γ1 !! f) eqn:Hopt1.
+    - destruct (Γ2 !! f) eqn:Hopt2.
+      * specialize (spec_ctx_lookup_union_app _ _ _ _ _ Hopt1 Hopt2) as Happ.
+        replace ((Γ1 [∪] Γ2) !! f) with (Some s) in Happ. inversion Happ; subst.
+        apply elem_of_app in Hin as [|].
+        ++ by eapply IHrule1.
+        ++ by eapply IHrule2.
+      * by eapply IHrule1;
+        first eapply spec_ctx_lookup_union_left.
+    - by eapply IHrule2;
+      first eapply spec_ctx_lookup_union_left;
+      first rewrite spec_ctx_union_comm.
 Qed.
-(* Soundness of well-formed UX specifications *)
-Lemma fun_spec_soundness γ f vs P Q ε :
+(* Soundness of well-formed function specifications *)
+Theorem fun_spec_soundness γ f vs P Q ε :
   wf_fun_spec γ f vs P Q ε → valid_fun_spec γ f vs P Q ε.
 Proof.
   intros [Γ [s [Himpl [HenvS Hspec]]]].
