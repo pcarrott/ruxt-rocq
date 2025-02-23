@@ -1,10 +1,9 @@
 From RUXt.lib Require Import gmap.
-From RUXt.lang Require Export lang.
-From RUXt.lang Require Import semantics.
-From RUXt.assertion Require Export hprop.
+From RUXt.lang Require Export lang semantics assertion.
+From RUXt.model Require Import logic.
 
 
-(*** Under-approximate specifications ***)
+(*** The RISL Program Logic ***)
 
 (* Function specifications *)
 Record fun_spec := mk_fun_spec { vals : list val; pre : asrt; tag : exit; post : asrt }.
@@ -20,6 +19,10 @@ Definition union (Γ1 Γ2 : spec_ctx) :=
   union_with (λ s1 s2, Some (s1 ++ s2)) Γ1 Γ2.
 Notation "Γ1 [∪] Γ2" := (union Γ1 Γ2) (at level 50).
 (* Properties *)
+Lemma spec_ctx_subseteq_refl Γ : Γ [⊆] Γ.
+Proof.
+  intros f s HSome. by eexists.
+Qed.
 Lemma spec_ctx_lookup_union_app Γ1 Γ2 f s1 s2 :
   Γ1 !! f = Some s1 → Γ2 !! f = Some s2 → (Γ1 [∪] Γ2) !! f = Some (s1 ++ s2).
 Proof.
@@ -39,10 +42,6 @@ Proof.
   + by replace (Γ1 !! f) with (Some s) in HNone.
   + by replace (Γ1 !! f) with (Some s1) in HNone.
 Qed.
-Lemma spec_ctx_subseteq_refl Γ : Γ [⊆] Γ.
-Proof.
-  intros f s HSome. by eexists.
-Qed.
 Lemma spec_ctx_subseteq_union_r Γ1 Γ2 : Γ1 [⊆] (Γ1 [∪] Γ2).
 Proof.
   intros f s HSome. destruct (Γ2 !! f) eqn:Hopt.
@@ -61,10 +60,10 @@ Proof.
 Qed.
 
 (* Proof rules *)
+Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉".
 Definition ux_frameable (ε : exit) (R : asrt) : Prop :=
   match ε with Miss (MLoc l) => ∀ h, hprop h R → l.1 ∉ dom h | _ => True end.
-Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉".
-Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
+Inductive wf_spec : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_Value Γ v :
   Γ ⊢ ⌈ EMP ⌉ Pure (PVal v) ⌈ Ok v, EMP ⌉
 | S_Minus Γ p z :
@@ -130,27 +129,11 @@ Inductive ux_rule : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_Exists Γ e P Q ε X :
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ ∃ₕ x ⋮ X, P ⌉ e ⌈ ε, ∃ₕ x ⋮ X, Q ⌉
-| S_Call Γ f ts vs P Q ε s :
-  Γ !! f = Some s → ⌈(vs) P | ε, Q⌉ ∈ s → ts = TVals vs →
-  Γ ⊢ ⌈ P ⌉ Call f ts ⌈ ε , Q ⌉
-where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (ux_rule Γ P e ε Q).
+| S_Call Γ f vs P Q ε s :
+  Γ !! f = Some s → ⌈(vs) P | ε, Q⌉ ∈ s →
+  Γ ⊢ ⌈ P ⌉ Call f (TVals vs) ⌈ ε , Q ⌉
+where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (wf_spec Γ P e ε Q).
 (* Derived rules *)
-Lemma S_EnvUnionL Γ1 Γ2 e P Q ε :
-  Γ1 ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → (Γ1 [∪] Γ2) ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
-Proof.
-  intros Hrule. eapply S_Cons; last done.
-  + eapply spec_ctx_subseteq_union_r.
-  + apply himplies_refl.
-  + apply himplies_refl.
-Qed.
-Lemma S_EnvUnionR Γ1 Γ2 e P Q ε :
-  Γ2 ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → (Γ1 [∪] Γ2) ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
-Proof.
-  intros Hrule. eapply S_Cons; last done.
-  + eapply spec_ctx_subseteq_union_l.
-  + apply himplies_refl.
-  + apply himplies_refl.
-Qed.
 Lemma S_FrameEmpL Γ e P Q ε :
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ ↔ Γ ⊢ ⌈ P ∗ EMP ⌉ e ⌈ ε, Q ⌉.
 Proof.
@@ -203,9 +186,27 @@ Proof.
     - apply himplies_refl.
     - intros h HQR. by apply hstar_comm.
 Qed.
+Lemma S_EnvUnionL Γ1 Γ2 e P Q ε :
+  Γ1 ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → (Γ1 [∪] Γ2) ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
+Proof.
+  intros Hrule. eapply S_Cons; last done.
+  + eapply spec_ctx_subseteq_union_r.
+  + apply himplies_refl.
+  + apply himplies_refl.
+Qed.
+Lemma S_EnvUnionR Γ1 Γ2 e P Q ε :
+  Γ2 ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → (Γ1 [∪] Γ2) ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉.
+Proof.
+  intros Hrule. eapply S_Cons; last done.
+  + eapply spec_ctx_subseteq_union_l.
+  + apply himplies_refl.
+  + apply himplies_refl.
+Qed.
 
 (* Well-formed specification contexts *)
 Reserved Notation "γ ≺ₛ Γ" (at level 50).
+Definition valid_exit (ε : exit) : Prop :=
+  match ε with Miss (MFun _) => False | _ => True end.
 Inductive wf_spec_ctx : impl_ctx → spec_ctx → Prop :=
 | E_Empty :
   ∅ ≺ₛ ∅
@@ -215,7 +216,7 @@ Inductive wf_spec_ctx : impl_ctx → spec_ctx → Prop :=
   γ' ≺ₛ Γ'
 | E_Spec γ Γ Γ' P Q ε f xs e vs :
   γ ≺ₛ Γ → γ !! f = Some {(xs) e} →
-  Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ →
+  Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ → valid_exit ε →
   Γ' = update ⌈(vs) P | ε, Q⌉ f Γ →
   γ ≺ₛ Γ'
 | E_Union γ Γ1 Γ2 :
@@ -231,25 +232,33 @@ Proof.
     - by apply not_elem_of_dom.
     - unfold empty; by rewrite fmap_insert.
 Qed.
-(* Well-formed function specifications *)
-Definition wf_fun_spec (γ : impl_ctx) f vs P Q ε :=
-  ∃ Γ s, γ ≺ₛ Γ ∧ Γ !! f = Some s ∧ ⌈(vs) P | ε, Q⌉ ∈ s.
+(* Properties *)
+Lemma wf_spec_ctx_Some γ Γ f : γ ≺ₛ Γ → is_Some (γ !! f) → is_Some (Γ !! f).
+Proof.
+  intros Henv [i HSome]. induction Henv; subst.
+  + done.
+  + apply lookup_insert_Some in HSome as [[]|[? []%IHHenv]];
+      eexists; apply lookup_insert_Some.
+    - by left.
+    - by right.
+  + apply IHHenv in HSome as [].
+    destruct (decide (f = f0)) as [<-|];
+      eexists; apply lookup_alter_Some.
+    - by left; split; last eexists; split.
+    - by right; split.
+  + specialize (IHHenv1 HSome) as []; specialize (IHHenv2 HSome) as [].
+    eexists. eapply lookup_union_with_Some. do 2 right.
+    by do 2 eexists.
+Qed.
 
 
 (*** Soundness ***)
 
 (* Proof rule definition *)
-Definition valid_exit (ε : exit) : Prop :=
-  match ε with Miss (MFun _) => False | _ => True end.
-Definition ux_triple (γ : impl_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
-  valid_exit ε ∧ ∀ h', hprop h' Q →
-  ∃ h, hprop h P ∧ γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩.
-Definition valid_fun_spec (γ : impl_ctx) f vs P Q ε :=
-  ∃ xs e, γ !! f = Some {(xs) e} ∧ ux_triple γ (e⌊vs[//]xs⌋) P Q ε.
 Definition valid_spec_ctx (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∀ vs P Q ε, ⌈(vs) P | ε, Q⌉ ∈ s →
-  valid_fun_spec γ f vs P Q ε.
-Definition ux_spec (Γ : spec_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
+  valid_exit ε ∧ ∃ xs e, γ !! f = Some {(xs) e} ∧ ux_triple γ (e⌊vs[//]xs⌋) P Q ε.
+Definition valid_spec (Γ : spec_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
   ∀ γ, valid_spec_ctx γ Γ → ux_triple γ e P Q ε.
 (* Properties *)
 Lemma spec_ctx_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
@@ -261,118 +270,116 @@ Proof.
 Qed.
 
 (* Soundness of proof rules *)
-Theorem ux_soundness Γ P e ε Q :
-  Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → ux_spec Γ e P Q ε.
+Theorem spec_soundness Γ P e ε Q :
+  Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ → valid_spec Γ e P Q ε.
 Proof.
   intros rule; induction rule; intros γ Hval.
-  + split; first done. intros h' HQ.
-    eexists. by split; last apply O_Pure.
-  + apply IHrule in Hval as [_ Hux].
-    split; first done. intros h' HQ.
-    apply Hux in HQ as [h [HP Hstep]].
-    eexists. by split; last (inversion Hstep; apply O_Pure, pure_neg_Some).
-  + apply IHrule in Hval as [_ Hux].
-    split; first done. intros h' HQ.
-    apply Hux in HQ as [h [HP Hstep]].
-    eexists. by split; last (inversion Hstep; apply O_Pure, pure_not_Some).
-  + specialize (IHrule1 _ Hval) as [_ Hux1]. specialize (IHrule2 _ Hval) as [_ Hux2].
-    split; first done. intros h' HQ.
-    specialize (Hux1 _ HQ) as [h1 [HP1 Hstep1]]. specialize (Hux2 _ HQ) as [h2 [HP2 Hstep2]].
-    eexists. by split; last (inversion Hstep1; inversion Hstep2; apply O_Pure, pure_plus_Some).
-  + specialize (IHrule1 _ Hval) as [_ Hux1]. specialize (IHrule2 _ Hval) as [_ Hux2].
-    split; first done. intros h' HQ.
-    specialize (Hux1 _ HQ) as [h1 [HP1 Hstep1]]. specialize (Hux2 _ HQ) as [h2 [HP2 Hstep2]].
-    eexists. by split; last (inversion Hstep1; inversion Hstep2; apply O_Pure, pure_le_Some).
-  + split; first done. intros h' HQ.
-    eexists. by split; last apply O_Assume.
-  + split; first done. intros h' HQ.
-    eexists. by split; last apply O_Error.
-  + specialize (IHrule1 _ Hval) as [_ Hux1]. specialize (IHrule2 _ Hval) as [Hε Hux2].
-    split; first done. intros h' HQ.
-    apply Hux2 in HQ as [h'' [HR Hstep2]]. apply Hux1 in HR as [h [HP Hstep1]].
-    eexists. by split; last eapply O_Let.
-  + apply IHrule in Hval as [_ Hux].
-    split; first done. intros h' HQ.
-    apply Hux in HQ as [h [HP Hstep]].
-    eexists. by split; last apply O_LetErr.
-  + apply IHrule in Hval as [Hε Hux].
-    split; first done. intros h' HQ.
-    apply Hux in HQ as [h [HP Hstep]].
-    eexists. by split; last eapply O_Choice.
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' HQ. eexists.
+    by split; last apply O_Pure.
+  + apply IHrule in Hval as Hux. intros h' HQ. 
+    apply Hux in HQ as [h [HP Hstep]]. eexists.
+    by split; last (inversion Hstep; apply O_Pure, pure_neg_Some).
+  + apply IHrule in Hval as Hux. intros h' HQ.
+    apply Hux in HQ as [h [HP Hstep]]. eexists.
+    by split; last (inversion Hstep; apply O_Pure, pure_not_Some).
+  + specialize (IHrule1 _ Hval) as Hux1. intros h' HQ.
+    specialize (Hux1 _ HQ) as [h1 [HP1 Hstep1]].
+    specialize (IHrule2 _ Hval) as Hux2. eexists.
+    specialize (Hux2 _ HQ) as [h2 [HP2 Hstep2]].
+    by split; last (inversion Hstep1; inversion Hstep2; apply O_Pure, pure_plus_Some).
+  + specialize (IHrule1 _ Hval) as Hux1. intros h' HQ.
+    specialize (Hux1 _ HQ) as [h1 [HP1 Hstep1]].
+    specialize (IHrule2 _ Hval) as Hux2. eexists.
+    specialize (Hux2 _ HQ) as [h2 [HP2 Hstep2]].
+    by split; last (inversion Hstep1; inversion Hstep2; apply O_Pure, pure_le_Some).
+  + intros h' HQ. eexists.
+    by split; last apply O_Assume.
+  + intros h' HQ. eexists.
+    by split; last apply O_Error.
+  + specialize (IHrule1 _ Hval) as Hux1. specialize (IHrule2 _ Hval) as Hux2.
+    intros h' HQ. apply Hux2 in HQ as [h'' [HR Hstep2]].
+    apply Hux1 in HR as [h [HP Hstep1]]. eexists.
+    by split; last eapply O_Let.
+  + apply IHrule in Hval as Hux. intros h' HQ.
+    apply Hux in HQ as [h [HP Hstep]]. eexists.
+    by split; last apply O_LetErr.
+  + apply IHrule in Hval as Hux. intros h' HQ.
+    apply Hux in HQ as [h [HP Hstep]]. eexists.
+    by split; last eapply O_Choice.
+  + intros h' [? Hi]; subst.
     eexists. split; first done. rewrite Hi.
     by apply (O_Alloc _ _ _ _ _ 1).
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' [? Hi]; subst.
     eexists. split; first done.
     eapply O_Free; try done; first apply lookup_insert.
     intros. apply dom_singleton, elem_of_singleton. lia.
     unfold hupdate. symmetry. apply insert_singleton.
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' [? Hi]; subst.
     eexists. split; first done.
     eapply O_Free; try done; first apply lookup_insert.
     intros. apply dom_singleton, elem_of_singleton. lia.
     unfold hupdate. symmetry. apply insert_singleton.
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' [? Hi]; subst.
     eexists. split; first done.
     by eapply O_FreeErrBlock; last apply lookup_insert.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
+  + intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
     by eapply O_FreeMiss; last apply not_elem_of_dom.
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' [? Hi]; subst.
     eexists. split; first done.
     eapply O_Store; try done; try (apply elem_of_dom; eexists); try apply lookup_insert.
     unfold hupdate, bupdate. replace {[l.2 := HVal v; l.2 := HVal v']} with
       ({[l.2 := HVal v]} : block_heap); by symmetry; apply insert_singleton.
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' [? Hi]; subst.
     eexists. split; first done.
     eapply O_Store; try done; try (apply elem_of_dom; eexists); try apply lookup_insert.
     unfold hupdate, bupdate. replace {[l.2 := HVal v; l.2 := Poison]} with
       ({[l.2 := HVal v]} : block_heap); by symmetry; apply insert_singleton.
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' [? Hi]; subst.
     eexists. split; first done.
     by eapply O_StoreErr; last apply lookup_insert.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
+  + intros h' HQ. simpl in HQ; subst.
     eexists. split; first done.
     by eapply O_StoreMiss; last apply not_elem_of_dom.
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' [? Hi]; subst.
     eexists. split; first done.
     by eapply O_Load; try apply lookup_insert.
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' [? Hi]; subst.
     eexists. split; first done.
     by eapply O_LoadErrBlock; try apply lookup_insert.
-  + split; first done. intros h' [? Hi]; subst.
+  + intros h' [? Hi]; subst.
     eexists. split; first done.
     by eapply O_LoadErr; try apply lookup_insert.
-  + split; first done. intros h' HQ. simpl in HQ; subst.
+  + intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
     by eapply O_LoadMiss; last apply not_elem_of_dom.
-  + apply IHrule in Hval as [Hε Hux].
-    split; first done. intros h' [hQ [hR [-> [Hdisj [HQ HR]]]]].
+  + apply IHrule in Hval as Hux.
+    intros h' [hQ [hR [-> [Hdisj [HQ HR]]]]].
     apply Hux in HQ as [h [HP Hstep]].
     eapply frame_addition in Hstep as [[]|[m [-> Hmiss]]]; last apply map_disjoint_empty_r; try done.
     - eexists. by split; first do 2 eexists; last rewrite <- (map_union_empty γ).
     - exfalso. assert (ux_frameable (Miss m) R) as Hframe by assumption.
       by destruct Hmiss as [[?[->]]|[?[]]]; first apply Hframe in HR.
-  + specialize (IHrule1 _ Hval) as [_ Hux1]. specialize (IHrule2 _ Hval) as [Hε Hux2].
-    split; first done. intros h' [HQ1|HQ2].
+  + specialize (IHrule1 _ Hval) as Hux1. specialize (IHrule2 _ Hval) as Hux2.
+    intros h' [HQ1|HQ2].
     - specialize (Hux1 _ HQ1) as [h1 [HP1 Hstep1]].
       eexists. by split; first left.
     - specialize (Hux2 _ HQ2) as [h2 [HP2 Hstep2]].
       eexists. by split; first right.
   + eapply spec_ctx_inclusion in Hval; last done.
-    apply IHrule in Hval as [Hε Hux].
-    split; first done. intros h' HQ.
+    apply IHrule in Hval as Hux.
+    intros h' HQ.
     assert (⊨ (Q →ₕ Q')) as HQimp by assumption; apply HQimp in HQ.
     apply Hux in HQ as [h [HP Hstep]].
     assert (⊨ (P' →ₕ P)) as HPimp by assumption; apply HPimp in HP.
     by eexists.
-  + apply IHrule in Hval as [Hε Hux].
-    split; first done. intros h' [v HQ].
+  + apply IHrule in Hval as Hux.
+    intros h' [v HQ].
     apply Hux in HQ as [h [HP Hstep]].
     eexists. by split; first by eexists.
   + assert (Γ !! f = Some s ∧ ⌈(vs) P | ε, Q⌉ ∈ s) as [HΓsome Hspec] by done.
     eapply Hval in HΓsome as [xs [e [Hγsome [Hε Hux]]]]; first done.
-    split; first done. intros h' HQ.
+    intros h' HQ.
     apply Hux in HQ as [h [HP Hstep]].
     eexists. by split; last (subst; eapply O_Call).
 Qed.
@@ -384,10 +391,10 @@ Proof.
   + done.
   + intros f' s HΓsome vs P Q ε Hin.
     apply lookup_insert_Some in HΓsome as [[_ <-]|[? HΓsome]]; first inversion Hin.
-    eapply IHrule in HΓsome as [xs' [e' [Hγsome [Hε Hux]]]]; first done.
-    do 2 eexists. split; first by rewrite (lookup_insert_ne γ).
-    split; first done. intros h' HQ.
-    specialize (Hux _ HQ) as [h [HP Hstep]].
+    eapply IHrule in HΓsome as [Hε [xs' [e' [Hγsome Hux]]]]; first done.
+    split; first done. do 2 eexists.
+    split; first by rewrite (lookup_insert_ne γ).
+    intros h' HQ. specialize (Hux _ HQ) as [h [HP Hstep]].
     eexists. split; first done.
     rewrite (insert_union_singleton_r γ); last by apply not_elem_of_dom.
     rewrite <- (map_union_empty h), <- (map_union_empty h').
@@ -397,9 +404,9 @@ Proof.
   + intros f' s HΓsome vs' P' Q' ε' Hin. unfold update in HΓsome.
     apply lookup_alter_Some in HΓsome as [[<- [? [? ->]]]|[]]; last by eapply IHrule.
     assert (Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉) as Hrule by assumption.    
-    specialize (ux_soundness _ _ _ _ _ Hrule _ IHrule) as Hux.
+    specialize (spec_soundness _ _ _ _ _ Hrule _ IHrule) as Hux.
     apply elem_of_cons in Hin as [Heq|]; last by eapply IHrule.
-    inversion Heq; subst. by do 2 eexists.
+    inversion Heq; subst. split; first done. by do 2 eexists.
   + intros f s HΓsome vs P Q ε Hin.
     unfold valid_spec_ctx in *.
     destruct (Γ1 !! f) eqn:Hopt1.
@@ -414,10 +421,12 @@ Proof.
     - by eapply IHrule2;
       first eapply spec_ctx_lookup_union_r.
 Qed.
-(* Soundness of well-formed function specifications *)
-Theorem fun_spec_soundness γ f vs P Q ε :
-  wf_fun_spec γ f vs P Q ε → valid_fun_spec γ f vs P Q ε.
-Proof.
-  intros [Γ [s [Himpl [HenvS Hspec]]]].
-  by eapply env_soundness.
+
+(* Instantiate RISL for the refutation algorithm *)
+Program Definition risl : logic := {|
+  derivable_spec γ e P Q ε := ∃ Γ, γ ≺ₛ Γ ∧ Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉ ∧ valid_exit ε;
+|}.
+Next Obligation.
+  intros γ e P Q ε [Γ [Henv%env_soundness [Hspec%spec_soundness]]].
+  by apply Hspec.
 Qed.

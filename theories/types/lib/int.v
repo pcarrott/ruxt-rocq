@@ -1,11 +1,11 @@
 From RUXt.lib Require Import gmap.
-From RUXt.assertion Require Export types.
+From RUXt.types Require Export type.
 
 
-Program Definition bool : type := {|
+Program Definition int : type := {|
   ty_size := 1;
   ty_own vs := match vs with
-               | [VBool _] => ⌞ True ⌟
+               | [VInt _] => ⌞ True ⌟
                | _ => ⌞ False ⌟
                end
 |}.

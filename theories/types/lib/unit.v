@@ -1,5 +1,5 @@
 From RUXt.lib Require Import gmap.
-From RUXt.assertion Require Export types.
+From RUXt.types Require Export type.
 
 
 Program Definition unit : type := {|

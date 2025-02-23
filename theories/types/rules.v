@@ -1,20 +1,13 @@
 From RUXt.lib Require Import gmap.
-From RUXt.lang Require Export lang.
-From RUXt.lang Require Import semantics.
-From RUXt.assertion Require Export hprop.
-From RUXt.assertion.types Require Export int bool unit own.
+From RUXt.lang Require Export semantics assertion.
+From RUXt.types.lib Require Export int bool unit own.
 
 
 (*** Over-approximate specifications ***)
 
-(* Function types *)
-Record fun_type := mk_fun_type { ty_in : list type; ty_out : type }.
-Notation "{ τs ↣ τ }" := (mk_fun_type τs τ).
-Definition type_ctx := gmap string fun_type.
-
 (* Typing rules *)
 Reserved Notation "Δ ∣ 𝕋 ⊢ e ⊣ λ𝕌" (at level 50).
-Inductive ty_rule : type_ctx → (list typing) → expr → (val → list typing) → Prop :=
+Inductive wf_judg : type_ctx → (list typing) → expr → (val → list typing) → Prop :=
 | T_Int Δ z :
   Δ ∣ [] ⊢ Pure (PInt z) ⊣ λ v, [v ⊲ int]
 | T_Bool Δ b :
@@ -60,7 +53,7 @@ Inductive ty_rule : type_ctx → (list typing) → expr → (val → list typing
 | T_Call Δ f ts τs τ vs :
   Δ !! f = Some {τs ↣ τ} → ts = TVals vs →
   Δ ∣ vs [⊲] boxes τs ⊢ Call f ts ⊣ λ v, [v ⊲ box τ]
-where "Δ ∣ 𝕋 ⊢ e ⊣ λ𝕌" := (ty_rule Δ 𝕋 e λ𝕌).
+where "Δ ∣ 𝕋 ⊢ e ⊣ λ𝕌" := (wf_judg Δ 𝕋 e λ𝕌).
 
 
 (*** Soundness ***)
@@ -70,16 +63,17 @@ Definition ox_triple (γ : impl_ctx) (e : expr) (P : asrt) (λQ : val → asrt) 
   ∀ h, hprop h P → ∀ h' ε, γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
   ∃ v, ε = Ok v ∧ hprop h' (λQ v).
 Definition valid_fun_type (γ : impl_ctx) f vs τs τ :=
-  ∃ xs e, γ !! f = Some {(xs) e} ∧ ox_triple γ (e⌊vs[//]xs⌋) ([∗ₜ vs [⊲] boxes τs]) (λ v, [∗ₜ [v ⊲ box τ]]).
+  ∃ xs e, γ !! f = Some {(xs) e} ∧
+  ox_triple γ (e⌊vs[//]xs⌋) ([∗ₜ vs [⊲] boxes τs]) (λ v, [∗ₜ [v ⊲ box τ]]).
 Definition valid_type_ctx (γ : impl_ctx) (Δ : type_ctx) : Prop :=
   ∀ f τs τ, Δ !! f = Some {τs ↣ τ} →
   ∀ vs, valid_fun_type γ f vs τs τ.
-Definition ty_spec (Δ : type_ctx) (e : expr) (𝕋 : list typing) (λ𝕌 : val → list typing) : Prop :=
+Definition valid_judg (Δ : type_ctx) (e : expr) (𝕋 : list typing) (λ𝕌 : val → list typing) : Prop :=
   ∀ γ, valid_type_ctx γ Δ → ox_triple γ e ([∗ₜ 𝕋]) (λ v, [∗ₜ λ𝕌 v]).
 
 (* Soundness of typing rules *)
-Theorem ty_soundness Δ 𝕋 e λ𝕌 :
-  Δ ∣ 𝕋 ⊢ e ⊣ λ𝕌 → ty_spec Δ e 𝕋 λ𝕌.
+Theorem judg_soundness Δ 𝕋 e λ𝕌 :
+  Δ ∣ 𝕋 ⊢ e ⊣ λ𝕌 → valid_judg Δ e 𝕋 λ𝕌.
 Proof.
   intros rule; induction rule; intros γ Hval h H𝕋 h' ε Hstep.
   + inversion Hstep; subst. eexists. split; first done.
@@ -124,7 +118,7 @@ Proof.
   + inversion Hstep; subst.
     - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩) as Hstep1 by assumption.
       assert (γ ⊢ ⟨ h'' | e2 ⌊ v // x ⌋ ⟩ ⇓ ⟨ h' | ε ⟩) as Hstep2 by assumption.
-      assert (∀ v', ty_spec Δ (e2⌊v'//x⌋) (λ𝕍 v') λ𝕌) as IHrule' by assumption.
+      assert (∀ v', valid_judg Δ (e2⌊v'//x⌋) (λ𝕍 v') λ𝕌) as IHrule' by assumption.
       specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
         [? [Hok [h𝕍 [htrue [-> [Hdisj𝕍 [H𝕍%own_typings Htrue]]]]]]].
       symmetry in Hok; inversion Hok; subst.

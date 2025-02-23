@@ -1,11 +1,8 @@
-From RUXt.lib Require Export gmap.
-From RUXt.lang Require Export lang.
-From RUXt.assertion Require Export hprop.
+From RUXt.lib Require Import gmap.
+From RUXt.lang Require Export lang assertion.
 
 
 (*** Type system ***)
-(* TODO: Handle (mut/shr) references and lifetimes *)
-(* TODO: Define default types *)
 
 (* Language types *)
 Record type := {
@@ -14,6 +11,10 @@ Record type := {
   ty_size_eq vs : ty_own vs ⊨ ⌞ length vs = ty_size ⌟;
 }.
 Notation "⟦ τ '⟧(' vs )" := (ty_own τ vs).
+(* Function types *)
+Record fun_type := mk_fun_type { ty_in : list type; ty_out : type }.
+Notation "{ τs ↣ τ }" := (mk_fun_type τs τ).
+Definition type_ctx := gmap string fun_type.
 
 (* Type assignment *)
 Inductive typing := TyOwn (v : val) (τ : type).
