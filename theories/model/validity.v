@@ -32,6 +32,7 @@ Qed.
 (* Reasoning principles under type specification contexts *)
 Definition valid_pre τs vs P := ⊨ (P →ₕ [∗ₜ vs [⊲] boxes τs]).
 Definition type_sound Λ := valid_type_ctx (impls Λ) (types Λ).
+(* Derivable states must satisfy the output type invariant *)
 Theorem principle_of_validity Λ L τ Q ε :
   type_sound Λ → derivable_post Λ L valid_pre τ Q ε →
   ⊨ (Q →ₕ (∃ₕ v, (⌞ ε = Ok v ⌟ ∗ [∗ₜ [v ⊲ box τ]]))).
@@ -45,8 +46,10 @@ Proof.
   (* The goal follows from the principle of agreement *)
   by eapply principle_of_agreement.
 Qed.
+(* Undefined behaviour is provably reachable *)
 Definition ub_derivable Λ :=
   ∃ L τ Q ε, derivable_post Λ L valid_pre τ Q ε ∧ sat Q ∧ ¬ ∃ v, ε = Ok v.
+(* Type-sound libraries must never exhibit undefined behaviour *)
 Theorem type_unsoundness Λ :
   ub_derivable Λ → ¬ type_sound Λ.
 Proof.

@@ -3,24 +3,24 @@ From RUXt.types Require Export type.
 From RUXt.model Require Export logic.
 
 
-(*** Type refutation via subvariant learning ***)
+(*** The Type Refutation Algorithm ***)
 
-(* Summaries for type subvariants *)
-Record summary := mk_summary { ty : type; ret : val; post : asrt }.
-Definition summ_ctx := list summary.
-
-(* Libraries and derivable states *)
+(* Libraries *)
 Record library := mk_library { impls : impl_ctx; types : type_ctx }.
+(* Well-typed states that can be derived by some UX logic *)
 Definition derivable_post Λ L is_pre τ Q ε :=
   (* Some function f outputs values of type τ *)
   ∃ f τs, types Λ !! f = Some {τs ↣ τ} ∧
-  (* vs is a valid input with some valid precondition [P] *)
+  (* vs is a well-typed input with some precondition [P] *)
   ∃ vs P, is_pre τs vs P ∧
-  (* An implementation exists for f *)
+  (* An implementation for f exists in the library *)
   ∃ xs e, (impls Λ) !! f = Some {(xs) e} ∧
-  (* [ε: Q] is a valid postcondition from executing f *)
+  (* [ε:Q] is a postcondition obtained from executing f *)
   (derivable_spec L) (impls Λ) (e⌊vs[//]xs⌋) P Q ε.
 
+(* Summaries for type spaces *)
+Record summary := mk_summary { ty : type; ret : val; post : asrt }.
+Definition summ_ctx := list summary.
 (* Well-formed input values and preconditions *)
 Inductive wf_input : summ_ctx → list typing → asrt → Prop :=
 | A_Emp Σ :
@@ -28,8 +28,9 @@ Inductive wf_input : summ_ctx → list typing → asrt → Prop :=
 | A_Star Σ 𝕋 P τ v Q :
   wf_input Σ 𝕋 P → mk_summary τ v Q ∈ Σ →
   wf_input Σ (v ⊲ τ :: 𝕋) (Q ∗ P).
-(* Type refutation algorithm *)
 Definition wf_pre Σ τs vs P := wf_input Σ (vs [⊲] τs) P ∧ length vs = length τs.
+
+(* Type refutation algorithm *)
 Definition try_refute Λ L Σ (ς : option summary) :=
   (* Postcondition [ε: Q] is reachable with output type τ *)
   ∃ τ Q ε, derivable_post Λ L (wf_pre Σ) τ Q ε ∧ sat Q ∧
@@ -142,7 +143,7 @@ Proof.
       by eapply reachable_from_main_subseteq; last apply list_subseteq_cons.
 Qed.
 
-(* A type assignment can be refuted *)
+(* A type assignment in the library can be refuted *)
 Definition has_refuted_type Λ :=
   ∃ Σ, wf_summ_ctx Λ Σ ∧ ∃ L, try_refute Λ L Σ None.
 (* A [main] program exhibits undefined behaviour *)

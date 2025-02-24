@@ -11,7 +11,7 @@ Notation "⌈ ( vs ) P | ε , Q ⌉" := (mk_fun_spec vs P ε Q).
 Definition spec_ctx := gmap string (list fun_spec).
 (* Overloading definitions *)
 Definition empty (γ : impl_ctx) : spec_ctx := (λ _, []) <$> γ.
-Definition update spec f (Γ : spec_ctx) := (alter (cons spec) f Γ).
+Definition update spec f (Γ : spec_ctx) := alter (cons spec) f Γ.
 Definition subseteq (Γ Γ' : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆ s'.
 Notation "Γ [⊆] Γ'" := (subseteq Γ Γ') (at level 50).
@@ -232,8 +232,9 @@ Proof.
     intros h' [h [HP Hstep]]%Hux.
     eexists. by split; last (subst; eapply O_Call).
 Qed.
+
 (* Soundness of specification contexts *)
-Theorem env_soundness γ Γ :
+Theorem spec_ctx_soundness γ Γ :
   γ ≺ₛ Γ → valid_spec_ctx γ Γ.
 Proof.
   intros rule; induction rule; subst.
@@ -253,6 +254,6 @@ Program Definition risl : logic := {|
   derivable_spec γ e P Q ε := ∃ Γ, γ ≺ₛ Γ ∧ Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉;
 |}.
 Next Obligation.
-  intros γ e P Q ε [Γ [Henv%env_soundness Hspec%spec_soundness]].
+  intros γ e P Q ε [Γ [Hctx%spec_ctx_soundness Hspec%spec_soundness]].
   by apply Hspec.
 Qed.
