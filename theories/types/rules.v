@@ -122,8 +122,7 @@ Proof.
       specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
         [? [Hok [h𝕍 [htrue [-> [Hdisj𝕍 [H𝕍%own_typings Htrue]]]]]]].
       symmetry in Hok; inversion Hok; subst.
-      eapply frame_subtraction in Hstep2 as [h𝕌' [Hdisj𝕌' Hstep2]]; try done;
-        last apply map_disjoint_empty_r; last apply map_union_id_r.
+      eapply frame_subtraction in Hstep2 as [h𝕌' [Hdisj𝕌' Hstep2]]; try done.
       destruct Hstep2 as [[Hstep2 ->]|[m [Hstep2 Hmiss]]].
       * specialize (IHrule' _ _ Hval _ H𝕍 _ _ Hstep2) as
           [? [-> [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
@@ -132,7 +131,7 @@ Proof.
         do 2 eexists. by repeat split; first apply map_disjoint_union_r.
       * by specialize (IHrule' _ _ Hval _ H𝕍 _ _ Hstep2) as
           [? [Hfalse [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
-    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Err ξ ⟩) as Hstep1 by assumption.
+    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Err ⟩) as Hstep1 by assumption.
       by specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
           [? [Hfalse [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
     - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Miss m ⟩) as Hstep1 by assumption.
@@ -329,8 +328,7 @@ Proof.
     apply map_disjoint_union_l in Hdisj as [].
     assert (h𝕋 ##ₘ h𝕍 ∪ htrue) as Hdisj by by apply map_disjoint_union_r.
     rewrite <- (assoc_L (∪)) in Hstep.
-    specialize (frame_subtraction _ _ _ _ _ Hstep _ _ _ _ eq_refl Hdisj
-      (map_union_id_r _) (map_disjoint_empty_r _))
+    specialize (frame_subtraction _ _ _ _ _ Hstep _ _ eq_refl Hdisj)
       as [h𝕌' [Hdisj𝕌' [[Hstep' ->]|[m [Hstep' Hmiss]]]]].
     - specialize (IHrule _ Hval _ H𝕋 _ _ Hstep') as
         [? [-> [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
@@ -349,8 +347,7 @@ Proof.
     rewrite <- (assoc_L (∪)) in Hstep.
     assert (h𝕋' ##ₘ h ∪ htrue) as Hdisj' by
       by apply map_disjoint_union_l in Hdisj as []; apply map_disjoint_union_r.
-    specialize (frame_subtraction _ _ _ _ _ Hstep _ _ _ _ eq_refl Hdisj'
-      (map_union_id_r _) (map_disjoint_empty_r _))
+    specialize (frame_subtraction _ _ _ _ _ Hstep _ _ eq_refl Hdisj')
       as [h𝕌'' [Hdisj𝕌'' [[Hstep' ->]|[m [Hstep' Hmiss]]]]].
     - specialize (IHrule _ Hval _ H𝕋' _ _ Hstep') as
         [? [-> [h𝕌' [htrue' [-> [Hdisj𝕌' [H𝕌' Htrue']]]]]]].
@@ -368,6 +365,4 @@ Proof.
       assert (γ !! f = Some { (xs) e}) as Hsome by assumption.
       rewrite Hsome' in Hsome; inversion Hsome; subst.
       by eapply Hox.
-    - specialize (Hval _ _ _ H vs) as [xs [e [Hsome _]]].
-      by rewrite Hsome in *.
 Qed.

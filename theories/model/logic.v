@@ -30,9 +30,8 @@ Lemma frame_spec γ e P Q v :
   ux_triple γ e P (P ∗ Q) (Ok v).
 Proof.
   intros Hux ? [hP [hQ [-> [?[? [?[-> Hstep]]%Hux]]]]]. eexists.
-  split; last eapply frame_addition in Hstep as [[Hstep]|[?[]]];
-    try done; last apply map_disjoint_empty_r.
-  by rewrite (map_union_empty γ), (map_empty_union hP), (map_union_comm hQ hP) in Hstep.
+  split; last eapply frame_addition in Hstep as [[Hstep]|[?[]]]; try done.
+  by rewrite (map_empty_union hP), (map_union_comm hQ hP) in Hstep.
 Qed.
 Lemma call_spec γ f xs e vs P Q ε :
   ux_triple γ (e ⌊ vs [//] xs ⌋) P Q ε → γ !! f = Some { (xs) e} →

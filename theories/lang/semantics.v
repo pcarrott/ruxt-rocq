@@ -41,38 +41,16 @@ Qed.
 
 (*** Termination ***)
 
-(* Error values *)
-Inductive error := ECrash.
-(* Miss values *)
-Inductive miss := MLoc (l : loc) | MFun (f : string).
 (* Termination tags *)
-Inductive exit := Ok (v : val) | Err (ξ : error) | Miss (m : miss).
-
-(* Equality *)
-Global Instance error_eq_dec : EqDecision error.
-Proof. solve_decision. Defined.
-Global Instance miss_eq_dec : EqDecision miss.
-Proof. solve_decision. Defined.
+Inductive exit := Ok (v : val) | Err | Miss (l : loc).
 Global Instance exit_eq_dec : EqDecision exit.
 Proof. solve_decision. Defined.
-
-(* Countability *)
-Global Instance error_countable : Countable error.
-Proof.
-  refine (inj_countable' (λ ξ, match ξ with ECrash => () end)
-  (λ u, match u with () => ECrash end) _); by intros [].
-Qed.
-Global Instance miss_countable : Countable miss.
-Proof.
-  refine (inj_countable' (λ m, match m with MLoc l => inl l | MFun f => inr f end)
-  (λ s, match s with inl l => MLoc l | inr f => MFun f end) _); by intros [].
-Qed.
 Global Instance exit_countable : Countable exit.
 Proof.
   refine (inj_countable' (λ ε, match ε with
-  | Ok v => (inl (inl v)) | Err ξ => (inl (inr ξ)) | Miss m => (inr m)
+  | Ok v => (inl (Some v)) | Err => (inl None) | Miss l => (inr l)
   end) (λ s, match s with
-  | (inl (inl v)) => Ok v | (inl (inr ξ)) => Err ξ | (inr m) => Miss m
+  | (inl (Some v)) => Ok v | (inl None) => Err | (inr l) => Miss l
   end) _); by intros [].
 Qed.
 
@@ -88,13 +66,13 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Assume γ h :
   γ ⊢ ⟨ h | Assume TTrue ⟩ ⇓ ⟨ h | Ok VUnit ⟩
 | O_Error γ h :
-  γ ⊢ ⟨ h | Error ⟩ ⇓ ⟨ h | Err ECrash ⟩
+  γ ⊢ ⟨ h | Error ⟩ ⇓ ⟨ h | Err ⟩
 | O_Let γ x e1 e2 h h' h'' v ε :
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | e2⌊v//x⌋ ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
-| O_LetErr γ x e1 e2 h h' ξ :
-  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Err ξ ⟩ →
-  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | Err ξ ⟩
+| O_LetErr γ x e1 e2 h h' :
+  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Err ⟩ →
+  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | Err ⟩
 | O_LetMiss γ x e1 e2 h h' m :
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Miss m ⟩ →
   γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | Miss m ⟩
@@ -114,19 +92,19 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_FreeErr γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
   l.2 ≠ 0 →
-  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ECrash ⟩
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ⟩
 | O_FreeErrBlock γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
   h !! l.1 = Some Freed →
-  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ECrash ⟩
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ⟩
 | O_FreeMiss γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
   l.1 ∉ dom h →
-  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss l ⟩
 | O_FreeMissBlock γ t h l sz bh i :
   ⌊ t ⌋ₜ = Some (VLoc l) →
   h !! l.1 = Some (BVal sz bh) → i < sz → i ∉ dom bh →
-  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss (MLoc (l +ₗ i)) ⟩
+  γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Miss (l +ₗ i) ⟩
 | O_Store γ t1 t2 h h' l sz bh v :
   ⌊ t1 ⌋ₜ = Some (VLoc l) → ⌊ t2 ⌋ₜ = Some v →
   h !! l.1 = Some (BVal sz bh) → l.2 ∈ dom bh →
@@ -135,15 +113,15 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_StoreErr γ t1 t2 h l :
   ⌊ t1 ⌋ₜ = Some (VLoc l) →
   h !! l.1 = Some Freed →
-  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Err ECrash ⟩
+  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Err ⟩
 | O_StoreMiss γ t1 t2 h l :
   ⌊ t1 ⌋ₜ = Some (VLoc l) →
   l.1 ∉ dom h →
-  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Miss l ⟩
 | O_StoreMissBlock γ t1 t2 h l sz bh :
   ⌊ t1 ⌋ₜ = Some (VLoc l) →
   h !! l.1 = Some (BVal sz bh) → l.2 ∉ dom bh →
-  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+  γ ⊢ ⟨ h | Store t1 t2 ⟩ ⇓ ⟨ h | Miss l ⟩
 | O_Load γ t h l sz bh v :
   ⌊ t ⌋ₜ = Some (VLoc l) →
   h !! l.1 = Some (BVal sz bh) → bh !! l.2 = Some (HVal v) →
@@ -151,49 +129,44 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_LoadErr γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
   h !! l.1 = Some Freed →
-  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Err ECrash ⟩
+  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Err ⟩
 | O_LoadErrBlock γ t h l sz bh :
   ⌊ t ⌋ₜ = Some (VLoc l) →
   h !! l.1 = Some (BVal sz bh) → bh !! l.2 = Some Poison →
-  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Err ECrash ⟩
+  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Err ⟩
 | O_LoadMiss γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
   l.1 ∉ dom h →
-  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss l ⟩
 | O_LoadMissBlock γ t h l sz bh :
   ⌊ t ⌋ₜ = Some (VLoc l) →
   h !! l.1 = Some (BVal sz bh) → l.2 ∉ dom bh →
-  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss (MLoc l) ⟩
+  γ ⊢ ⟨ h | Load t ⟩ ⇓ ⟨ h | Miss l ⟩
 | O_Call γ f xs e ts h h' ε :
   γ !! f = Some {(xs) e} → γ ⊢ ⟨ h | e⌊ts[//]xs⌋ₜ ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Call f ts ⟩ ⇓ ⟨ h' | ε ⟩
-| O_CallMiss γ f ts h :
-  γ !! f = None →
-  γ ⊢ ⟨ h | Call f ts ⟩ ⇓ ⟨ h | Miss (MFun f) ⟩
 where "γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩" := (eval_expr γ h e h' ε).
 
 (* Under-approximate frame validity - frame addition *)
 Theorem frame_addition γ h e h' ε :
   γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
-  ∀ hF γF, h' ##ₘ hF → γ ##ₘ γF →
-  ((γ ∪ γF) ⊢ ⟨ h ∪ hF | e ⟩ ⇓ ⟨ h' ∪ hF | ε ⟩ ∧ h ##ₘ hF) ∨
-  (∃ m, ε = Miss m ∧ (
-    (∃ l, m = MLoc l ∧ l.1 ∈ dom hF) ∨ (∃ f, m = MFun f ∧ f ∈ dom γF)
-  )).
+  ∀ hF, h' ##ₘ hF →
+  (γ ⊢ ⟨ h ∪ hF | e ⟩ ⇓ ⟨ h' ∪ hF | ε ⟩ ∧ h ##ₘ hF) ∨
+  (∃ l, ε = Miss l ∧ l.1 ∈ dom hF).
 Proof.
   intros Hstep.
-  induction Hstep; intros hF γF Hframe' Hγ.
+  induction Hstep; intros hF Hframe'.
   + left. by split; first apply O_Pure.
   + left. by split; first apply O_Assume.
   + left. by split; first apply O_Error.
-  + specialize (IHHstep2 _ _ Hframe' Hγ) as [[Hstep2F Hframe'']|]; last by right.
-    specialize (IHHstep1 _ _ Hframe'' Hγ) as [[Hstep1F Hframe]|[?[]]]; last by exfalso.
+  + specialize (IHHstep2 _ Hframe') as [[Hstep2F Hframe'']|]; last by right.
+    specialize (IHHstep1 _ Hframe'') as [[Hstep1F Hframe]|[?[]]]; last by exfalso.
     left. by split; first eapply O_Let.
-  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
+  + specialize (IHHstep _ Hframe') as [[HstepF Hframe]|]; last by right.
     left. by split; first apply O_LetErr.
-  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
+  + specialize (IHHstep _ Hframe') as [[HstepF Hframe]|]; last by right.
     left. by split; first apply O_LetMiss.
-  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
+  + specialize (IHHstep _ Hframe') as [[HstepF Hframe]|]; last by right.
     left. by split; first eapply O_Choice.
   + left. subst. rewrite hupdate_union; last done.
     apply hupdate_disj in Hframe' as [? Hnin].
@@ -206,7 +179,7 @@ Proof.
   + left. split; last done. eapply O_FreeErrBlock; try done.
     apply lookup_union_Some_raw; by left.
   + destruct (hF !! l.1) as [hv|] eqn:Hlookup.
-    - right. eexists. split; first done. left. eexists. split; first done.
+    - right. eexists. split; first done.
       apply elem_of_dom. by eexists.
     - left. split; last done. eapply O_FreeMiss; try done.
       assert (l.1 ∉ dom h) as Hnin by assumption.
@@ -223,7 +196,7 @@ Proof.
   + left. split; last done. eapply O_StoreErr; try done.
     apply lookup_union_Some_raw; by left.
   + destruct (hF !! l.1) as [hv|] eqn:Hlookup.
-    - right. eexists. split; first done. left. eexists. split; first done.
+    - right. eexists. split; first done.
       apply elem_of_dom. by eexists.
     - left. split; last done. eapply O_StoreMiss; try done.
       intros Hin%dom_union.
@@ -238,7 +211,7 @@ Proof.
   + left. split; last done. eapply O_LoadErrBlock; try done.
     apply lookup_union_Some_raw; by left.
   + destruct (hF !! l.1) as [hv|] eqn:Hlookup.
-    - right. eexists. split; first done. left. eexists. split; first done.
+    - right. eexists. split; first done.
       apply elem_of_dom. by eexists.
     - left. split; last done. eapply O_LoadMiss; try done.
       assert (l.1 ∉ dom h) as Hnin by assumption.
@@ -247,55 +220,47 @@ Proof.
       rewrite <- not_elem_of_dom in Hlookup. by exfalso.
   + left. split; last done. eapply O_LoadMissBlock; try done.
     apply lookup_union_Some_raw; by left.
-  + specialize (IHHstep _ _ Hframe' Hγ) as [[HstepF Hframe]|]; last by right.
+  + specialize (IHHstep _ Hframe') as [[HstepF Hframe]|]; last by right.
     left. split; last done. eapply O_Call; try done.
-    apply lookup_union_Some_raw; by left.
-  + destruct (γF !! f) as [hv|] eqn:Hlookup.
-    - right. eexists. split; first done. right. eexists. split; first done.
-      apply elem_of_dom. by eexists.
-    - left. split; last done. eapply O_CallMiss; try done.
-      by apply lookup_union_None.
 Qed.
 
 (* Over-approximate frame validity - frame subtraction *)
 Theorem frame_subtraction γ h e h' ε :
   γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
-  ∀ hs hF γs γF, h = hs ∪ hF → hs ##ₘ hF → γ = γs ∪ γF → γs ##ₘ γF →
+  ∀ hs hF, h = hs ∪ hF → hs ##ₘ hF →
   ∃ hs', hs' ##ₘ hF ∧ (
-    (γs ⊢ ⟨ hs | e ⟩ ⇓ ⟨ hs' | ε ⟩ ∧ h' = hs' ∪ hF) ∨
-    (∃ m, γs ⊢ ⟨ hs | e ⟩ ⇓ ⟨ hs' | Miss m ⟩ ∧ (
-      (∃ l, m = MLoc l ∧ l.1 ∈ dom hF) ∨ (∃ f, m = MFun f ∧ f ∈ dom γF)
-    ))
+    (γ ⊢ ⟨ hs | e ⟩ ⇓ ⟨ hs' | ε ⟩ ∧ h' = hs' ∪ hF) ∨
+    (∃ l, γ ⊢ ⟨ hs | e ⟩ ⇓ ⟨ hs' | Miss l ⟩ ∧ l.1 ∈ dom hF)
   ).
 Proof.
   intros Hstep.
-  induction Hstep; intros hs hF γs γF Hheap Hframe Hfun Hγ.
+  induction Hstep; intros hs hF Hheap Hframe.
   + eexists. split; first done.
     left. by split; first apply O_Pure.
   + eexists. split; first done.
     left. by split; first apply O_Assume.
   + eexists. split; first done.
     left. by split; first apply O_Error.
-  + specialize (IHHstep1 _ _ _ _ Hheap Hframe Hfun Hγ) as [hs'' [Hframe'' Hstep1F]].
+  + specialize (IHHstep1 _ _ Hheap Hframe) as [hs'' [Hframe'' Hstep1F]].
     destruct Hstep1F as [[Hstep1F Hheap'']|[ms [Hmiss Hdom]]].
-    - specialize (IHHstep2 _ _ _ _ Hheap'' Hframe'' Hfun Hγ) as [hs' [Hframe' Hstep2F]].
+    - specialize (IHHstep2 _ _ Hheap'' Hframe'') as [hs' [Hframe' Hstep2F]].
       eexists. split; first done.
       destruct Hstep2F as [[Hstep2F Hheap']|[ms [Hmiss Hdom]]].
       * left. by split; first eapply O_Let.
       * right. eexists. by split; first eapply O_Let.
     - eexists. split; first done.
       right. eexists. by split; first apply O_LetMiss.
-  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+  + specialize (IHHstep _ _ Hheap Hframe) as [hs' [Hframe' HstepF]].
     eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[ms [Hmiss Hdom]]].
     - left. by split; first apply O_LetErr.
     - right. eexists. by split; first apply O_LetMiss.
-  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+  + specialize (IHHstep _ _ Hheap Hframe) as [hs' [Hframe' HstepF]].
     eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[ms [Hmiss Hdom]]].
     - left. by split; first apply O_LetMiss.
     - right. eexists. by split; first apply O_LetMiss.
-  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+  + specialize (IHHstep _ _ Hheap Hframe) as [hs' [Hframe' HstepF]].
     eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
     - left. by split; first eapply O_Choice.
@@ -315,7 +280,7 @@ Proof.
         first by split; last apply not_elem_of_dom.
     - eexists. split; first done.
       right. eexists. split; first by eapply O_FreeMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      by eapply map_union_dom; first eexists.
   + eexists. split; first done.
     left. split; last done. by eapply O_FreeErr.
   + eexists. split; first done.
@@ -323,7 +288,7 @@ Proof.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_FreeErrBlock.
     - right. eexists. split; first by eapply O_FreeMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      by eapply map_union_dom; first eexists.
   + eexists. split; first done.
     left. split; last done. eapply O_FreeMiss; try done. set_solver.
   + eexists. split; first done.
@@ -331,20 +296,20 @@ Proof.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_FreeMissBlock.
     - right. eexists. split; first by eapply O_FreeMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      by eapply map_union_dom; first eexists.
   + subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - eexists. split; first by eapply map_disjoint_Some_insert.
       left. split; last by rewrite <- insert_union_l. by eapply O_Store.
     - eexists. split; first done.
       right. eexists. split; first by apply O_StoreMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      by eapply map_union_dom; first eexists.
   + eexists. split; first done.
     subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_StoreErr.
     - right. eexists. split; first by apply O_StoreMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      by eapply map_union_dom; first eexists.
   + eexists. split; first done.
     left. split; last done. apply O_StoreMiss; first done. set_solver.
   + eexists. split; first done.
@@ -352,25 +317,25 @@ Proof.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_StoreMissBlock.
     - right. eexists. split; first by eapply O_StoreMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      by eapply map_union_dom; first eexists.
   + eexists. split; first done.
     subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_Load.
     - right. eexists. split; first by apply O_LoadMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      by eapply map_union_dom; first eexists.
   + eexists. split; first done.
     subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_LoadErr.
     - right. eexists. split; first by apply O_LoadMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      by eapply map_union_dom; first eexists.
   + eexists. split; first done.
     subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_LoadErrBlock.
     - right. eexists. split; first by eapply O_LoadMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
+      by eapply map_union_dom; first eexists.
   + eexists. split; first done.
     left. split; last done. apply O_LoadMiss; first done. set_solver.
   + eexists. split; first done.
@@ -378,18 +343,11 @@ Proof.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
     - left. by split; first eapply O_LoadMissBlock.
     - right. eexists. split; first by eapply O_LoadMiss, not_elem_of_dom.
-      left. eexists. split; first done. by eapply map_union_dom; first eexists.
-  + specialize (IHHstep _ _ _ _ Hheap Hframe Hfun Hγ) as [hs' [Hframe' HstepF]].
+      by eapply map_union_dom; first eexists.
+  + specialize (IHHstep _ _ Hheap Hframe) as [hs' [Hframe' HstepF]].
     subst; assert (_ !! f = Some _) as Hlookup by done.
-    apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - eexists. split; first done.
-      destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
-      * left. by split; first eapply O_Call.
-      * right. eexists. by split; first eapply O_Call.
-    - exists hs. split; first done.
-      right. eexists. split; first by eapply O_CallMiss.
-      right. eexists. split; first done. by eapply map_union_dom; first eexists.
-  + eexists. split; first done.
-    left. split; last done. apply O_CallMiss.
-    by eapply (lookup_union_None γs γF); subst.
+    eexists. split; first done.
+    destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
+    - left. by split; first eapply O_Call.
+    - right. eexists. by split; first eapply O_Call.
 Qed.
