@@ -64,10 +64,9 @@ Fixpoint hprop (h : heap) (a : asrt) : Prop :=
 Definition hmodels (P Q : asrt) : Prop :=
   ∀ h, hprop h P → ∃ h', h' ⊆ h ∧ hprop h' Q.
 Notation "H1 ⊨ H2" := (hmodels H1 H2) (at level 50).
-Definition hvalid (P : asrt) : Prop :=
-  ∀ h, hprop h P.
+Definition hvalid (P : asrt) : Prop := ∀ h, hprop h P.
 Notation "⊨ H" := (hvalid H) (at level 50).
-Definition sat (P : asrt) : Prop := ¬ ⊨ (P →ₕ FALSE).
+Definition sat (P : asrt) : Prop := ∃ h, hprop h P.
 
 
 (*** Properties ***)

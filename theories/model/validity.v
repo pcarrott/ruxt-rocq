@@ -53,7 +53,8 @@ Definition ub_derivable Λ :=
 Theorem type_unsoundness Λ :
   ub_derivable Λ → ¬ type_sound Λ.
 Proof.
-  intros [?[?[?[?[Hpost [Hsat Hε]]]]]] Hvalid.
-  eapply principle_of_validity in Hvalid; try done. apply Hsat.
-  intros h [?[?[?[?[?[[_ ?] _]]]]]]%Hvalid. by apply Hε; eexists.
+  intros [?[?[?[?[?[[? Hsat] Hε]]]]]] Hsound.
+  eapply principle_of_validity in Hsound; last done.
+  apply Hsound in Hsat as [?[?[?[?[?[[_ ?] _]]]]]].
+  by apply Hε; eexists.
 Qed.
