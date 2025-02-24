@@ -31,9 +31,9 @@ Qed.
 
 (* Reasoning principles under type specification contexts *)
 Definition valid_pre τs vs P := ⊨ (P →ₕ [∗ₜ vs [⊲] boxes τs]).
-Definition valid_library Λ := valid_type_ctx (impls Λ) (types Λ).
+Definition type_sound Λ := valid_type_ctx (impls Λ) (types Λ).
 Theorem principle_of_validity Λ L τ Q ε :
-  valid_library Λ → derivable_post Λ L valid_pre τ Q ε →
+  type_sound Λ → derivable_post Λ L valid_pre τ Q ε →
   ⊨ (Q →ₕ (∃ₕ v, (⌞ ε = Ok v ⌟ ∗ [∗ₜ [v ⊲ box τ]]))).
 Proof.
   intros HenvT [f [τs [Htype [vs [P [HP [xs [e [Himpl Hspec]]]]]]]]].
@@ -48,7 +48,7 @@ Qed.
 Definition ub_derivable Λ :=
   ∃ L τ Q ε, derivable_post Λ L valid_pre τ Q ε ∧ sat Q ∧ ¬ ∃ v, ε = Ok v.
 Theorem type_unsoundness Λ :
-  ub_derivable Λ → ¬ valid_library Λ.
+  ub_derivable Λ → ¬ type_sound Λ.
 Proof.
   intros [?[?[?[?[Hpost [Hsat Hε]]]]]] Hvalid.
   eapply principle_of_validity in Hvalid; try done. apply Hsat.

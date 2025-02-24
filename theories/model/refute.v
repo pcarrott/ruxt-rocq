@@ -146,11 +146,11 @@ Qed.
 Definition has_refuted_type Λ :=
   ∃ Σ, wf_summ_ctx Λ Σ ∧ ∃ L, try_refute Λ L Σ None.
 (* A [main] program exhibits undefined behaviour *)
-Definition ub_reachable Λ :=
+Definition inadequate Λ :=
   ∃ Σ, valid_summ_ctx Λ Σ ∧ ∃ Q ε, reachable_from_main Λ Σ Q ε ∧ sat Q ∧ ¬ ∃ v, ε = Ok v.
 (* Adequacy result for refuted type assignments *)
 Theorem inadequacy Λ :
-  has_refuted_type Λ → ub_reachable Λ.
+  has_refuted_type Λ → inadequate Λ.
 Proof.
   intros [Σ [Hctx%summ_ctx_soundness [L [τ [Q [ε [Hpost [Hsat Hε]]]]]]]].
   eexists; split; first done. do 2 eexists; split.
