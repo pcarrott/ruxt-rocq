@@ -85,7 +85,7 @@ Qed.
 
 (* A [main] function starts from [EMP] and only has [safe] calls to the library *)
 Definition reachable_from_main Λ Σ (Q : asrt) (ε : exit) :=
-  ∃ e, only_safe_calls (types Λ) Σ e ∧ ux_triple (impls Λ) e EMP Q ε.
+  ∃ e, only_safe_calls (types Λ) Σ e ∧ ux_frame_triple (impls Λ) e EMP Q ε.
 (* Properties *)
 Lemma reachable_from_main_subseteq Λ Σ Σ' Q ε :
   reachable_from_main Λ Σ' Q ε → Σ' ⊆ Σ → reachable_from_main Λ Σ Q ε.
@@ -100,7 +100,7 @@ Definition valid_summ_ctx Λ Σ :=
 (* Properties *)
 Lemma subseteq_reachable Λ Σ Σ' :
   valid_summ_ctx Λ Σ → Σ' ⊆ Σ →
-  ∃ v, reachable_from_main Λ Σ ([∗map post Σ', id]) (Ok v).
+  ∃ v, reachable_from_main Λ Σ ([∗ map post Σ', id]) (Ok v).
 Proof.
   intros Hsumm Hsub. induction Σ'.
   + simpl. exists VUnit, (Pure (PVal VUnit)).
@@ -125,7 +125,7 @@ Proof.
     eexists; split; first done. do 2 eexists; split; first done.
     exists Σ''. split; first by etrans.
     apply (zip_with_inj TyOwn); try done; solve_length.
-  + destruct Hfun as [xs [e' [Henv Hspec%ux_soundness]]].
+  + destruct Hfun as [xs [e' [Henv Hspec%ux_frame_soundness]]].
     by eapply let_spec; last eapply call_spec.
 Qed.
 (* Soundness *)
@@ -148,13 +148,15 @@ Definition has_refuted_type Λ :=
   ∃ Σ, wf_summ_ctx Λ Σ ∧ ∃ L, try_refute Λ L Σ None.
 (* A [main] program exhibits undefined behaviour *)
 Definition inadequate Λ :=
-  ∃ Σ, valid_summ_ctx Λ Σ ∧ ∃ Q ε, reachable_from_main Λ Σ Q ε ∧ sat Q ∧ ¬ ∃ v, ε = Ok v.
+  ∃ Σ, valid_summ_ctx Λ Σ ∧
+  ∃ e, only_safe_calls (types Λ) Σ e ∧
+  ∃ h, (impls Λ) ⊢ ⟨ ∅ | e ⟩ ⇓ ⟨ h | Err ⟩.
 (* Adequacy result for refuted type assignments *)
 Theorem inadequacy Λ :
   has_refuted_type Λ → inadequate Λ.
 Proof.
   intros [Σ [Hctx%summ_ctx_soundness [L [τ [Q [ε [Hpost [Hsat Hε]]]]]]]].
-  eexists; split; first done. do 2 eexists; split.
-  + by eapply derivable_for_main.
-  + by split; last by intros [? ->].
+  eapply derivable_for_main in Hpost as [e [Hsafe Hux%ux_triple_preservation]]; last done.
+  destruct Hsat as [?[?[->]]%Hux].
+  do 2 (eexists; split; first done). by eexists; destruct ε.
 Qed.

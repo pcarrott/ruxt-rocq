@@ -58,18 +58,28 @@ where "Δ ∣ 𝕋 ⊢ e ⊣ λ𝕌" := (wf_judg Δ 𝕋 e λ𝕌).
 
 (*** Soundness ***)
 
-(* Typing rule definition *)
-Definition ox_triple (γ : impl_ctx) (e : expr) (P : asrt) (λQ : val → asrt) : Prop :=
-  ∀ h, hprop h P → ∀ h' ε, γ ⊢ ⟨ h | e ⟩ ⇓ ⟨ h' | ε ⟩ →
+(* OX semantics *)
+Definition ox_triple eval (γ : impl_ctx) (e : expr) (P : asrt) (λQ : val → asrt) : Prop :=
+  ∀ h, hprop h P → ∀ h' ε, eval γ h e h' ε →
   ∃ v, ε = Ok v ∧ hprop h' (λQ v).
+Definition ox_frame_triple γ e P λQ := ox_triple eval_expr_frame γ e P λQ.
+Definition ox_full_triple γ e P λQ := ox_triple eval_expr γ e P λQ.
+Theorem ox_triple_preservation γ e P λQ :
+  ox_full_triple γ e P λQ → ox_frame_triple γ e P λQ.
+Proof.
+  intros Hox ? Hok%Hox ? ? [?[]]%semantics_preservation%Hok.
+  by eexists; destruct ε.
+Qed.
+
+(* Typing rule definition *)
 Definition valid_fun_type (γ : impl_ctx) f vs τs τ :=
   ∃ xs e, γ !! f = Some {(xs) e} ∧
-  ox_triple γ (e⌊vs[//]xs⌋) ([∗ₜ vs [⊲] boxes τs]) (λ v, [∗ₜ [v ⊲ box τ]]).
+  ox_frame_triple γ (e⌊vs[//]xs⌋) ([∗ₜ vs [⊲] boxes τs]) (λ v, [∗ₜ [v ⊲ box τ]]).
 Definition valid_type_ctx (γ : impl_ctx) (Δ : type_ctx) : Prop :=
   ∀ f τs τ, Δ !! f = Some {τs ↣ τ} →
   ∀ vs, valid_fun_type γ f vs τs τ.
 Definition valid_judg (Δ : type_ctx) (e : expr) (𝕋 : list typing) (λ𝕌 : val → list typing) : Prop :=
-  ∀ γ, valid_type_ctx γ Δ → ox_triple γ e ([∗ₜ 𝕋]) (λ v, [∗ₜ λ𝕌 v]).
+  ∀ γ, valid_type_ctx γ Δ → ox_frame_triple γ e ([∗ₜ 𝕋]) (λ v, [∗ₜ λ𝕌 v]).
 
 (* Soundness of typing rules *)
 Theorem judg_soundness Δ 𝕋 e λ𝕌 :
@@ -116,8 +126,8 @@ Proof.
     do 2 eexists. repeat split;
       first apply map_union_id_l; first apply map_disjoint_empty_l.
   + inversion Hstep; subst.
-    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩) as Hstep1 by assumption.
-      assert (γ ⊢ ⟨ h'' | e2 ⌊ v // x ⌋ ⟩ ⇓ ⟨ h' | ε ⟩) as Hstep2 by assumption.
+    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h'' | Ok v ⟩) as Hstep1 by assumption.
+      assert (γ ⊢ ⟨ h'' | e2 ⌊ v // x ⌋ ⟩ ⇓ᵢ ⟨ h' | ε ⟩) as Hstep2 by assumption.
       assert (∀ v', valid_judg Δ (e2⌊v'//x⌋) (λ𝕍 v') λ𝕌) as IHrule' by assumption.
       specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
         [? [Hok [h𝕍 [htrue [-> [Hdisj𝕍 [H𝕍%own_typings Htrue]]]]]]].
@@ -131,19 +141,19 @@ Proof.
         do 2 eexists. by repeat split; first apply map_disjoint_union_r.
       * by specialize (IHrule' _ _ Hval _ H𝕍 _ _ Hstep2) as
           [? [Hfalse [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
-    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Err ⟩) as Hstep1 by assumption.
+    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | Err ⟩) as Hstep1 by assumption.
       by specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
           [? [Hfalse [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
-    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Miss m ⟩) as Hstep1 by assumption.
+    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | Miss m ⟩) as Hstep1 by assumption.
       by specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
           [? [Hfalse [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
   + inversion Hstep; subst.
     assert (ei = e1 ∨ ei = e2) as [|] by assumption; subst.
-    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | ε ⟩) as Hstep1 by assumption.
+    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | ε ⟩) as Hstep1 by assumption.
       specialize (IHrule1 _ Hval _ H𝕋 _ _ Hstep1) as
         [? [-> [h𝕌 [htrue [-> [Hdisj𝕌 [H𝕌 Htrue]]]]]]].
       eexists. split; first done. by do 2 eexists.
-    - assert (γ ⊢ ⟨ h | e2 ⟩ ⇓ ⟨ h' | ε ⟩) as Hstep2 by assumption.
+    - assert (γ ⊢ ⟨ h | e2 ⟩ ⇓ᵢ ⟨ h' | ε ⟩) as Hstep2 by assumption.
       specialize (IHrule2 _ Hval _ H𝕋 _ _ Hstep2) as
         [? [-> [h𝕌 [htrue [-> [Hdisj𝕌 [H𝕌 Htrue]]]]]]].
       eexists. split; first done. by do 2 eexists.

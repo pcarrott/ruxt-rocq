@@ -7,10 +7,10 @@ From RUXt.model Require Export logic refute.
 (*** Properties relating OX and UX reasoning ***)
 
 (* Reasoning principles for triples *)
-Theorem principle_of_agreement γ e Pₒₓ λQₒₓ Pᵤₓ Qᵤₓ ε :
-  ux_triple γ e Pᵤₓ Qᵤₓ ε →
+Theorem principle_of_agreement eval γ e Pₒₓ λQₒₓ Pᵤₓ Qᵤₓ ε :
+  ux_triple eval γ e Pᵤₓ Qᵤₓ ε →
   ⊨ (Pᵤₓ →ₕ Pₒₓ) →
-  ox_triple γ e Pₒₓ λQₒₓ →
+  ox_triple eval γ e Pₒₓ λQₒₓ →
   ⊨ (Qᵤₓ →ₕ ∃ₕ v, (⌞ ε = Ok v ⌟ ∗ λQₒₓ v)).
 Proof.
   intros Hux HPimp Hox h' HQux.
@@ -19,11 +19,11 @@ Proof.
   do 3 eexists. by repeat split;
     first apply map_union_id_l; first apply map_disjoint_empty_l.
 Qed.
-Theorem principle_of_denial γ e Pₒₓ λQₒₓ Pᵤₓ Qᵤₓ ε :
-  ux_triple γ e Pᵤₓ Qᵤₓ ε →
+Theorem principle_of_denial eval γ e Pₒₓ λQₒₓ Pᵤₓ Qᵤₓ ε :
+  ux_triple eval γ e Pᵤₓ Qᵤₓ ε →
   ⊨ (Pᵤₓ →ₕ Pₒₓ) →
   ¬ ⊨ (Qᵤₓ →ₕ ∃ₕ v, (⌞ ε = Ok v ⌟ ∗ λQₒₓ v)) →
-  ¬ ox_triple γ e Pₒₓ λQₒₓ.
+  ¬ ox_triple eval γ e Pₒₓ λQₒₓ.
 Proof.
   intros Hux HPimp HnQimp Hox. apply HnQimp.
   by eapply principle_of_agreement.
@@ -39,7 +39,7 @@ Theorem principle_of_validity Λ L τ Q ε :
 Proof.
   intros HenvT [f [τs [Htype [vs [P [HP [xs [e [Himpl Hspec]]]]]]]]].
   (* Obtain the UX triple *)
-  apply ux_soundness in Hspec as Hux.
+  apply ux_frame_soundness in Hspec as Hux.
   (* Obtain the OX triple *)
   eapply HenvT in Htype as [? [? [HFimpl' Hox]]].
   rewrite HFimpl' in Himpl; inversion Himpl; subst.
