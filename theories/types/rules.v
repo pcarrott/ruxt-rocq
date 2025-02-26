@@ -60,8 +60,7 @@ where "Δ ∣ 𝕋 ⊢ e ⊣ λ𝕌" := (wf_judg Δ 𝕋 e λ𝕌).
 
 (* OX semantics *)
 Definition ox_triple eval (γ : impl_ctx) (e : expr) (P : asrt) (λQ : val → asrt) : Prop :=
-  ∀ h, hprop h P → ∀ h' ε, eval γ h e h' ε →
-  ∃ v, ε = Ok v ∧ hprop h' (λQ v).
+  ∀ h, hprop h P → ∀ h' ε, eval γ h e h' ε → ∃ v, ε = Ok v ∧ hprop h' (λQ v).
 Definition ox_frame_triple γ e P λQ := ox_triple eval_expr_frame γ e P λQ.
 Definition ox_full_triple γ e P λQ := ox_triple eval_expr γ e P λQ.
 Theorem ox_triple_preservation γ e P λQ :
@@ -71,7 +70,7 @@ Proof.
   by eexists; destruct ε.
 Qed.
 
-(* Typing rule definition *)
+(* Typing judgement definition *)
 Definition valid_fun_type (γ : impl_ctx) f vs τs τ :=
   ∃ xs e, γ !! f = Some {(xs) e} ∧
   ox_frame_triple γ (e⌊vs[//]xs⌋) ([∗ₜ vs [⊲] boxes τs]) (λ v, [∗ₜ [v ⊲ box τ]]).

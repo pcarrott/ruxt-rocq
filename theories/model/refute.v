@@ -23,9 +23,9 @@ Record summary := mk_summary { ty : type; ret : val; post : asrt }.
 Definition summ_ctx := list summary.
 (* Well-formed input values and preconditions *)
 Inductive wf_input : summ_ctx → list typing → asrt → Prop :=
-| A_Emp Σ :
+| I_Emp Σ :
   wf_input Σ [] EMP
-| A_Star Σ 𝕋 P τ v Q :
+| I_Star Σ 𝕋 P τ v Q :
   wf_input Σ 𝕋 P → mk_summary τ v Q ∈ Σ →
   wf_input Σ (v ⊲ τ :: 𝕋) (Q ∗ P).
 Definition wf_pre Σ τs vs P := wf_input Σ (vs [⊲] τs) P ∧ length vs = length τs.
@@ -38,9 +38,9 @@ Definition try_refute Λ L Σ (ς : option summary) :=
   ς = match ε with Ok v => Some (mk_summary τ v Q) | _ => None end.
 (* Well-formed type summary contexts *)
 Inductive wf_summ_ctx : library → summ_ctx → Prop :=
-| L_Nil Λ : 
+| R_Nil Λ : 
   wf_summ_ctx Λ []
-| L_Cons Λ L Σ ς :
+| R_Cons Λ L Σ ς :
   wf_summ_ctx Λ Σ → try_refute Λ L Σ (Some ς) →
   wf_summ_ctx Λ (ς :: Σ).
 
@@ -148,9 +148,8 @@ Definition has_refuted_type Λ :=
   ∃ Σ, wf_summ_ctx Λ Σ ∧ ∃ L, try_refute Λ L Σ None.
 (* A [main] program exhibits undefined behaviour *)
 Definition inadequate Λ :=
-  ∃ Σ, valid_summ_ctx Λ Σ ∧
-  ∃ e, only_safe_calls (types Λ) Σ e ∧
-  ∃ h, (impls Λ) ⊢ ⟨ ∅ | e ⟩ ⇓ ⟨ h | Err ⟩.
+  ∃ e h, (impls Λ) ⊢ ⟨ ∅ | e ⟩ ⇓ ⟨ h | Err ⟩ ∧
+  ∃ Σ, valid_summ_ctx Λ Σ ∧ only_safe_calls (types Λ) Σ e.
 (* Adequacy result for refuted type assignments *)
 Theorem inadequacy Λ :
   has_refuted_type Λ → inadequate Λ.
@@ -158,5 +157,5 @@ Proof.
   intros [Σ [Hctx%summ_ctx_soundness [L [τ [Q [ε [Hpost [Hsat Hε]]]]]]]].
   eapply derivable_for_main in Hpost as [e [Hsafe Hux%ux_triple_preservation]]; last done.
   destruct Hsat as [?[?[->]]%Hux].
-  do 2 (eexists; split; first done). by eexists; destruct ε.
+  do 2 eexists. split; last by eexists. by destruct ε.
 Qed.
