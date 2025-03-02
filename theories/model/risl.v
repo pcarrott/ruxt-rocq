@@ -42,9 +42,9 @@ Inductive wf_spec : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_Let Γ x e1 e2 P Q R v ε :
   Γ ⊢ ⌈ P ⌉ e1 ⌈ Ok v, R ⌉ → Γ ⊢ ⌈ R ⌉ e2⌊v//x⌋ ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ P ⌉ Let x e1 e2 ⌈ ε, Q ⌉
-| S_LetCut Γ x e1 e2 P Q :
-  Γ ⊢ ⌈ P ⌉ e1 ⌈ Err, Q ⌉ →
-  Γ ⊢ ⌈ P ⌉ Let x e1 e2 ⌈ Err, Q ⌉
+| S_LetCut Γ x e1 e2 P Q ε :
+  Γ ⊢ ⌈ P ⌉ e1 ⌈ ε, Q ⌉ → (¬ ∃ v, ε = Ok v) →
+  Γ ⊢ ⌈ P ⌉ Let x e1 e2 ⌈ ε, Q ⌉
 | S_Choice Γ ei e1 e2 P Q ε :
   Γ ⊢ ⌈ P ⌉ ei ⌈ ε, Q ⌉ → (ei = e1 ∨ ei = e2) →
   Γ ⊢ ⌈ P ⌉ Choice e1 e2 ⌈ ε, Q ⌉
@@ -152,9 +152,12 @@ Proof.
     intros h' HQ. apply Hux2 in HQ as [h'' [HR Hstep2]].
     apply Hux1 in HR as [h [HP Hstep1]]. eexists.
     by split; last eapply F_Let.
-  + apply IHrule in Hval as Hux. intros h' HQ.
+  + assert (¬ ∃ v, ε = Ok v) as Hε by assumption.
+    apply IHrule in Hval as Hux. intros h' HQ.
     apply Hux in HQ as [h [HP Hstep]]. eexists.
-    by split; last apply F_LetErr.
+    split; first done.
+    by destruct ε; first (by exfalso; apply Hε; eexists);
+      first apply F_LetErr; last apply F_LetMiss.
   + apply IHrule in Hval as Hux. intros h' HQ.
     apply Hux in HQ as [h [HP Hstep]]. eexists.
     by split; last eapply F_Choice.
