@@ -37,12 +37,11 @@ Theorem principle_of_validity Λ L τ Q ε :
   type_sound Λ → derivable_post Λ L valid_pre τ Q ε →
   ⊨ (Q →ₕ (∃ₕ v, (⌞ ε = Ok v ⌟ ∗ [∗ₜ [v ⊲ box τ]]))).
 Proof.
-  intros HenvT [f [τs [Htype [vs [P [HP [xs [e [Himpl Hspec]]]]]]]]].
-  (* Obtain the UX triple *)
-  apply ux_frame_soundness in Hspec as Hux.
+  intros HenvT [f [τs [Htype [vs [P [HP Hspec]]]]]].
   (* Obtain the OX triple *)
-  eapply HenvT in Htype as [? [? [HFimpl' Hox]]].
-  rewrite HFimpl' in Himpl; inversion Himpl; subst.
+  eapply HenvT in Htype as [xs [e [Himpl Hox]]].
+  (* Obtain the UX triple *)
+  eapply ux_frame_soundness, call_spec in Hspec as Hux; last done.
   (* The goal follows from the principle of agreement *)
   by eapply principle_of_agreement.
 Qed.

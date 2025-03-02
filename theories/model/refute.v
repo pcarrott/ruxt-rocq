@@ -13,10 +13,8 @@ Definition derivable_post Λ L is_pre τ Q ε :=
   ∃ f τs, types Λ !! f = Some {τs ↣ τ} ∧
   (* vs is a well-typed input with some precondition [P] *)
   ∃ vs P, is_pre τs vs P ∧
-  (* An implementation for f exists in the library *)
-  ∃ xs e, (impls Λ) !! f = Some {(xs) e} ∧
   (* [ε:Q] is a postcondition obtained from executing f *)
-  (derivable_spec L) (impls Λ) (e⌊vs[//]xs⌋) P Q ε.
+  (derivable_spec L) (impls Λ) (Call f (TVals vs)) P Q ε.
 
 (* Summaries for type spaces *)
 Record summary := mk_summary { ty : type; ret : val; post : asrt }.
@@ -116,7 +114,7 @@ Lemma derivable_for_main Λ L Σ τ Q ε :
   valid_summ_ctx Λ Σ → derivable_post Λ L (wf_pre Σ) τ Q ε →
   reachable_from_main Λ Σ Q ε.
 Proof.
-  intros Hsumm [f [τs [Htype [vs [P [[Hinput Hlen] Hfun]]]]]].
+  intros Hsumm [f [τs [Htype [vs [P [[Hinput Hlen] Hspec%ux_frame_soundness]]]]]].
   apply input_soundness in Hinput as [Σ'' [Hsub' [-> H𝕋]]].
   specialize (subseteq_reachable _ _ _ Hsumm Hsub') as [? Hreach].
   destruct Hreach as [e [Hsafe Htriple]].
@@ -125,8 +123,7 @@ Proof.
     eexists; split; first done. do 2 eexists; split; first done.
     exists Σ''. split; first by etrans.
     apply (zip_with_inj TyOwn); try done; solve_length.
-  + destruct Hfun as [xs [e' [Henv Hspec%ux_frame_soundness]]].
-    by eapply let_spec; last eapply call_spec.
+  + by eapply let_spec.
 Qed.
 (* Soundness *)
 Theorem summ_ctx_soundness Λ Σ :
