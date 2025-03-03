@@ -168,9 +168,7 @@ Proof.
   + assert (¬ ∃ v, ε = Ok v) as Hε by assumption.
     apply IHrule in Hval as Hux. intros h' HQ.
     apply Hux in HQ as [h [HP Hstep]]. eexists.
-    split; first done.
-    by destruct ε; first (by exfalso; apply Hε; eexists);
-      first apply F_LetErr; last apply F_LetMiss.
+    by split; last apply F_LetCut.
   + apply IHrule in Hval as Hux. intros h' HQ.
     apply Hux in HQ as [h [HP Hstep]]. eexists.
     by split; last eapply F_Choice.
@@ -189,7 +187,7 @@ Proof.
     unfold hupdate. symmetry. apply insert_singleton.
   + intros h' [? Hi]; subst.
     eexists. split; first done.
-    by eapply F_FreeErrBlock; last apply lookup_insert.
+    by eapply F_FreeErr; last apply lookup_insert.
   + intros h' HQ. simpl in HQ; subst.
     eexists. split; first by eexists.
     by eapply F_FreeMiss; last apply not_elem_of_dom.

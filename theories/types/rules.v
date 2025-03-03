@@ -140,12 +140,11 @@ Proof.
         do 2 eexists. by repeat split; first apply map_disjoint_union_r.
       * by specialize (IHrule' _ _ Hval _ H𝕍 _ _ Hstep2) as
           [? [Hfalse [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
-    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | Err ⟩) as Hstep1 by assumption.
-      by specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
-          [? [Hfalse [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
-    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | Miss m ⟩) as Hstep1 by assumption.
-      by specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
-          [? [Hfalse [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
+    - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | ε ⟩) as Hstep1 by assumption.
+      specialize (IHrule _ Hval _ H𝕋 _ _ Hstep1) as
+        [? [Hfalse [h𝕌 [htrue' [-> [Hdisj𝕌 [H𝕌 Htrue']]]]]]].
+      assert (¬ ∃ v, ε = Ok v) as Hnok by assumption.
+      exfalso. by apply Hnok; eexists.
   + inversion Hstep; subst.
     assert (ei = e1 ∨ ei = e2) as [|] by assumption; subst.
     - assert (γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | ε ⟩) as Hstep1 by assumption.
@@ -170,13 +169,13 @@ Proof.
     - eexists. split; first done. do 2 eexists. repeat split;
         first apply map_union_id_l; first apply map_disjoint_empty_l.
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
-      rewrite hiter_singleton in Hl. by apply own_loc in Hl as [? []].
-    - replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_singleton in Hl. apply own_loc in Hl as [? [hv]].
       assert ((hl ∪ htrue) !! l.1 = Some Freed)
         as Hfalse%lookup_union_Some_inv_l by assumption;
         last by eapply map_disjoint_Some_l.
       replace (hl !! l.1) with (Some (BVal 1 {[l.2 := hv]})) in Hfalse. congruence.
+    - replace vl with (VLoc l) in * by (simpl in *; congruence).
+      rewrite hiter_singleton in Hl. by apply own_loc in Hl as [? []].
     - replace vl with (VLoc l) in * by (simpl in *; congruence).
       rewrite hiter_singleton in Hl. apply own_loc in Hl as [? []].
       assert (l.1 ∉ dom (hl ∪ htrue)) as Hfalse by assumption.

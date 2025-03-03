@@ -70,9 +70,9 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
 | O_Let γ x e1 e2 h h' h'' v ε :
   γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | e2⌊v//x⌋ ⟩ ⇓ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
-| O_LetErr γ x e1 e2 h h' :
-  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | Err ⟩ →
-  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | Err ⟩
+| O_LetCut γ x e1 e2 h h' ε :
+  γ ⊢ ⟨ h | e1 ⟩ ⇓ ⟨ h' | ε ⟩ → (¬ ∃ v, ε = Ok v) →
+  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
 | O_Choice γ ei e1 e2 h h' ε :
   γ ⊢ ⟨ h | ei ⟩ ⇓ ⟨ h' | ε ⟩ → (ei = e1 ∨ ei = e2) →
   γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ ⟨ h' | ε ⟩
@@ -88,11 +88,11 @@ Inductive eval_expr : impl_ctx → heap → expr → heap → exit → Prop :=
   γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h' | Ok VUnit ⟩
 | O_FreeErr γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
-  l.2 ≠ 0 →
+  h !! l.1 = Some Freed →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ⟩
 | O_FreeErrBlock γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
-  h !! l.1 = Some Freed →
+  l.2 ≠ 0 →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ ⟨ h | Err ⟩
 | O_FreeMiss γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
@@ -157,12 +157,9 @@ Inductive eval_expr_frame : impl_ctx → heap → expr → heap → exit → Pro
 | F_Let γ x e1 e2 h h' h'' v ε :
   γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h'' | Ok v ⟩ → γ ⊢ ⟨ h'' | e2⌊v//x⌋ ⟩ ⇓ᵢ ⟨ h' | ε ⟩ →
   γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ᵢ ⟨ h' | ε ⟩
-| F_LetErr γ x e1 e2 h h' :
-  γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | Err ⟩ →
-  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ᵢ ⟨ h' | Err ⟩
-| F_LetMiss γ x e1 e2 h h' m :
-  γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | Miss m ⟩ →
-  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ᵢ ⟨ h' | Miss m ⟩
+| F_LetCut γ x e1 e2 h h' ε :
+  γ ⊢ ⟨ h | e1 ⟩ ⇓ᵢ ⟨ h' | ε ⟩ → (¬ ∃ v, ε = Ok v) →
+  γ ⊢ ⟨ h | Let x e1 e2 ⟩ ⇓ᵢ ⟨ h' | ε ⟩
 | F_Choice γ ei e1 e2 h h' ε :
   γ ⊢ ⟨ h | ei ⟩ ⇓ᵢ ⟨ h' | ε ⟩ → (ei = e1 ∨ ei = e2) →
   γ ⊢ ⟨ h | Choice e1 e2 ⟩ ⇓ᵢ ⟨ h' | ε ⟩
@@ -178,11 +175,11 @@ Inductive eval_expr_frame : impl_ctx → heap → expr → heap → exit → Pro
   γ ⊢ ⟨ h | Free t ⟩ ⇓ᵢ ⟨ h' | Ok VUnit ⟩
 | F_FreeErr γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
-  l.2 ≠ 0 →
+  h !! l.1 = Some Freed →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ᵢ ⟨ h | Err ⟩
 | F_FreeErrBlock γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
-  h !! l.1 = Some Freed →
+  l.2 ≠ 0 →
   γ ⊢ ⟨ h | Free t ⟩ ⇓ᵢ ⟨ h | Err ⟩
 | F_FreeMiss γ t h l :
   ⌊ t ⌋ₜ = Some (VLoc l) →
@@ -250,9 +247,7 @@ Proof.
     specialize (IHHstep1 _ Hframe'') as [[Hstep1F Hframe]|[?[]]]; last by exfalso.
     left. by split; first eapply F_Let.
   + specialize (IHHstep _ Hframe') as [[HstepF Hframe]|]; last by right.
-    left. by split; first apply F_LetErr.
-  + specialize (IHHstep _ Hframe') as [[HstepF Hframe]|]; last by right.
-    left. by split; first apply F_LetMiss.
+    left. by split; first apply F_LetCut.
   + specialize (IHHstep _ Hframe') as [[HstepF Hframe]|]; last by right.
     left. by split; first eapply F_Choice.
   + left. subst. rewrite hupdate_union; last done.
@@ -262,9 +257,9 @@ Proof.
     apply hupdate_disj in Hframe' as [].
     split; first eapply F_Free; try done.
     apply lookup_union_Some_raw; by left.
-  + left. split; last done. by eapply F_FreeErr.
-  + left. split; last done. eapply F_FreeErrBlock; try done.
+  + left. split; last done. eapply F_FreeErr; try done.
     apply lookup_union_Some_raw; by left.
+  + left. split; last done. by eapply F_FreeErrBlock.
   + destruct (hF !! l.1) as [hv|] eqn:Hlookup.
     - right. eexists. split; first done.
       apply elem_of_dom. by eexists.
@@ -336,17 +331,12 @@ Proof.
       * left. by split; first eapply F_Let.
       * right. eexists. by split; first eapply F_Let.
     - eexists. split; first done.
-      right. eexists. by split; first apply F_LetMiss.
+      right. eexists. by split; first (apply F_LetCut; last (intros [])).
   + specialize (IHHstep _ _ Hheap Hframe) as [hs' [Hframe' HstepF]].
     eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[ms [Hmiss Hdom]]].
-    - left. by split; first apply F_LetErr.
-    - right. eexists. by split; first apply F_LetMiss.
-  + specialize (IHHstep _ _ Hheap Hframe) as [hs' [Hframe' HstepF]].
-    eexists. split; first done.
-    destruct HstepF as [[HstepF Hheap']|[ms [Hmiss Hdom]]].
-    - left. by split; first apply F_LetMiss.
-    - right. eexists. by split; first apply F_LetMiss.
+    - left. by split; first apply F_LetCut.
+    - right. eexists. by split; first (apply F_LetCut; last (intros [])).
   + specialize (IHHstep _ _ Hheap Hframe) as [hs' [Hframe' HstepF]].
     eexists. split; first done.
     destruct HstepF as [[HstepF Hheap']|[m [Hmiss Hdom]]].
@@ -369,13 +359,13 @@ Proof.
       right. eexists. split; first by eapply F_FreeMiss, not_elem_of_dom.
       by eapply map_union_dom; first eexists.
   + eexists. split; first done.
-    left. split; last done. by eapply F_FreeErr.
-  + eexists. split; first done.
     subst; assert (_ !! l.1 = Some _) as Hlookup by done.
     apply lookup_union_Some_raw in Hlookup as [HSome|[HNone _]].
-    - left. by split; first eapply F_FreeErrBlock.
+    - left. by split; first eapply F_FreeErr.
     - right. eexists. split; first by eapply F_FreeMiss, not_elem_of_dom.
       by eapply map_union_dom; first eexists.
+  + eexists. split; first done.
+    left. split; last done. by eapply F_FreeErrBlock.
   + eexists. split; first done.
     left. split; last done. eapply F_FreeMiss; try done. set_solver.
   + eexists. split; first done.
@@ -450,8 +440,7 @@ Proof.
   + by apply O_Assume.
   + by apply O_Error.
   + by eapply O_Let.
-  + by eapply O_LetErr.
-  + by eapply O_LetErr.
+  + by apply O_LetCut; last destruct ε; last (intros []).
   + by eapply O_Choice.
   + by eapply O_Alloc.
   + by eapply O_Free.
