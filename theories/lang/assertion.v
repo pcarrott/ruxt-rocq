@@ -15,9 +15,7 @@ Inductive asrt :=
 | AImplies (a1 a2 : asrt)
 | AExists {X : Type} (P : X → asrt)
 | AEmp
-| ASingle (l : loc) (v : val)
-| AUninit (l : loc)
-| AFreed (l : loc)
+| ASingle (l : loc) (bv : block_value)
 | AStar (a1 a2 : asrt).
 (* Classical logic *)
 Notation "⌞ P ⌟" := (APure P).
@@ -30,9 +28,9 @@ Notation "∃ₕ x , P" := (AExists (λ x, P)) (at level 50).
 Notation "∃ₕ x ⋮ X , P" := (AExists (λ x : X, P)) (at level 50).
 (* Separation logic *)
 Notation "'EMP'" := AEmp.
-Notation "l ↦ v" := (ASingle l v) (at level 50).
-Notation "l '↦∅'" := (AFreed l) (at level 50).
-Notation "l '↦?'" := (AUninit l) (at level 50).
+Notation "l ↦ v" := (ASingle l (BVal 1 {[l.2 := HVal v]})) (at level 50).
+Notation "l '↦∅'" := (ASingle l Freed) (at level 50).
+Notation "l '↦?'" := (ASingle l (BVal 1 {[l.2 := Poison]})) (at level 50).
 Notation "H1 ∗ H2" := (AStar H1 H2) (at level 50).
 (* Syntactic sugar *)
 Notation "⌜ P ⌝" := (P ∗ TRUE).
@@ -55,9 +53,7 @@ Fixpoint hprop (h : heap) (a : asrt) : Prop :=
   | AImplies a1 a2 => hprop h a1 → hprop h a2
   | AExists P => ∃ x, hprop h (P x)
   | AEmp => h = ∅
-  | ASingle l v => h = {[l.1 := BVal 1 {[l.2 := HVal v]}]} ∧ l.2 = 0
-  | AUninit l => h = {[l.1 := BVal 1 {[l.2 := Poison]}]} ∧ l.2 = 0
-  | AFreed l => h = {[l.1 := Freed]} ∧ l.2 = 0
+  | ASingle l bv => h = {[l.1 := bv]} ∧ l.2 = 0
   | AStar a1 a2 => ∃ h1 h2, h = h1 ∪ h2 ∧ h1 ##ₘ h2 ∧ hprop h1 a1 ∧ hprop h2 a2
   end.
 (* Satisfiability *)

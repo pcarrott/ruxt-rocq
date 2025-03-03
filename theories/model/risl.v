@@ -16,10 +16,23 @@ Definition subseteq (Γ Γ' : spec_ctx) : Prop :=
   ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆ s'.
 Notation "Γ [⊆] Γ'" := (subseteq Γ Γ') (at level 50).
 
+(* Frameable assertions *)
+Definition frameable (ε : exit) (R : asrt) : Prop :=
+  match ε with Miss l => l.2 = 0 ∧ ¬ sat (⌜ ∃ₕ bv, ASingle l bv ⌝ ∧ₕ R) | _ => True end.
+Lemma frameable_heap l R : frameable (Miss l) R → ∀ h, hprop h R → l.1 ∈ dom h → False.
+Proof.
+  intros [Hofs Hnsat] h HR Hin. apply Hnsat.
+  eexists. split; last done.
+  apply elem_of_dom in Hin as [? <-%insert_id].
+  do 2 eexists. split; last split;
+    last by split; first eexists.
+  + rewrite <- insert_delete_insert.
+    apply insert_union_singleton_l.
+  + apply map_disjoint_singleton_l, lookup_delete.
+Qed.
+
 (* Proof rules *)
 Reserved Notation "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉".
-Definition ux_frameable (ε : exit) (R : asrt) : Prop :=
-  match ε with Miss l => ∀ h, hprop h R → l.1 ∉ dom h | _ => True end.
 Inductive wf_spec : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_Value Γ v :
   Γ ⊢ ⌈ EMP ⌉ Pure (PVal v) ⌈ Ok v, EMP ⌉
@@ -75,7 +88,7 @@ Inductive wf_spec : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_LoadEmp Γ l :
   Γ ⊢ ⌈ EMP ⌉ Load (TLoc l) ⌈ Miss l, EMP ⌉
 | S_Frame  Γ e P Q R ε :
-  Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ → ux_frameable ε R →
+  Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ → frameable ε R →
   Γ ⊢ ⌈ P ∗ R ⌉ e ⌈ ε, Q ∗ R ⌉
 | S_Disj Γ e P1 P2 Q1 Q2 ε :
   Γ ⊢ ⌈ P1 ⌉ e ⌈ ε, Q1 ⌉ → Γ ⊢ ⌈ P2 ⌉ e ⌈ ε, Q2 ⌉ →
@@ -213,8 +226,8 @@ Proof.
     apply Hux in HQ as [h [HP Hstep]].
     eapply frame_addition in Hstep as [[]|[l [-> Hmiss]]]; try done.
     - eexists. by split; first do 2 eexists.
-    - assert (ux_frameable (Miss l) R) as Hframe by assumption.
-      exfalso. by apply Hframe in HR.
+    - assert (frameable (Miss l) R) as Hframe by assumption.
+      exfalso. by eapply frameable_heap.
   + specialize (IHrule1 _ Hval) as Hux1. specialize (IHrule2 _ Hval) as Hux2.
     intros h' [HQ1|HQ2].
     - specialize (Hux1 _ HQ1) as [h1 [HP1 Hstep1]].
