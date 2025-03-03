@@ -57,12 +57,12 @@ Proof.
 Qed.
 
 (* A program constructed solely from [safe] calls to the library *)
-Fixpoint only_safe_calls (Δ : type_ctx) (Σ : summ_ctx) (e : expr) :=
+Fixpoint only_safe_calls Λ Σ e :=
   match e with
-  | Let _ e1 e2 | Choice e1 e2 => only_safe_calls Δ Σ e1 ∧ only_safe_calls Δ Σ e2
-  | Call f ts => ∃ vs, ts = TVals vs ∧ ∃ τs τ, Δ !! f = Some {τs ↣ τ} ∧
+  | Let _ e1 e2 => only_safe_calls Λ Σ e1 ∧ only_safe_calls Λ Σ e2
+  | Call f ts => ∃ vs, ts = TVals vs ∧ ∃ τs τ, (types Λ) !! f = Some {τs ↣ τ} ∧
                  ∃ Σ', Σ' ⊆ Σ ∧ vs = map ret Σ' ∧ τs = map ty Σ'
-  | Pure _ | Assume _ | Alloc _ => True
+  | Pure PUnit => True
   | _ => False
   end.
 (* Properties *)
@@ -73,9 +73,6 @@ Proof.
   + destruct Hsafe as []. split.
     - by apply IHe1.
     - by apply IHe2.
-  + destruct Hsafe as []. split.
-    - by apply IHe1.
-    - by apply IHe2.
   + destruct Hsafe as [? [-> [? [? [Htype [Σ'' [Hsub' [-> ->]]]]]]]].
     eexists; split; first done. do 2 eexists; split; first done.
     exists Σ''. by split; first etrans.
@@ -83,7 +80,7 @@ Qed.
 
 (* A [main] function starts from [EMP] and only has [safe] calls to the library *)
 Definition reachable_from_main Λ Σ (Q : asrt) (ε : exit) :=
-  ∃ e, only_safe_calls (types Λ) Σ e ∧ ux_frame_triple (impls Λ) e EMP Q ε.
+  ∃ e, only_safe_calls Λ Σ e ∧ ux_frame_triple (impls Λ) e EMP Q ε.
 (* Properties *)
 Lemma reachable_from_main_subseteq Λ Σ Σ' Q ε :
   reachable_from_main Λ Σ' Q ε → Σ' ⊆ Σ → reachable_from_main Λ Σ Q ε.
@@ -146,7 +143,7 @@ Definition has_refuted_type Λ :=
 (* A [main] program exhibits undefined behaviour *)
 Definition inadequate Λ :=
   ∃ e h, (impls Λ) ⊢ ⟨ ∅ | e ⟩ ⇓ ⟨ h | Err ⟩ ∧
-  ∃ Σ, valid_summ_ctx Λ Σ ∧ only_safe_calls (types Λ) Σ e.
+  ∃ Σ, valid_summ_ctx Λ Σ ∧ only_safe_calls Λ Σ e.
 (* Adequacy result for refuted type assignments *)
 Theorem inadequacy Λ :
   has_refuted_type Λ → inadequate Λ.
