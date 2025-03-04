@@ -8,51 +8,56 @@ From RUXt.model Require Export logic.
 (* Libraries *)
 Record library := mk_library { impls : impl_ctx; types : type_ctx }.
 (* Well-typed states that can be derived by some UX logic *)
-Definition derivable_post Λ is_pre τ Q ε :=
+Definition derivable_post Λ is_src e τ Q ε :=
   (* Some function f outputs values of type τ *)
   ∃ f τs, types Λ !! f = Some {τs ↣ τ} ∧
-  (* vs is a well-typed input with some precondition [P] *)
-  ∃ vs P, is_pre τs vs P ∧
+  (* Program s generates values vs and precondition [P] *)
+  ∃ s vs P, is_src s τs vs P ∧ e = Let <> s (Call f (TVals vs)) ∧
   (* [ε:Q] is a postcondition obtained from executing f *)
   ∃ L, (derivable_spec L) (impls Λ) (Call f (TVals vs)) P Q ε.
 
 (* Summaries for type spaces *)
-Record summary := mk_summary { ty : type; ret : val; post : asrt }.
+Record summary := mk_summary { ty : type; ret : val; post : asrt; src : expr }.
 Definition summ_ctx := list summary.
 (* Well-formed input values and preconditions *)
-Inductive wf_input : summ_ctx → list typing → asrt → Prop :=
+Notation skip := (Pure (PVal VUnit)).
+Inductive wf_witness : summ_ctx → expr → list typing → asrt → Prop :=
 | I_Emp Σ :
-  wf_input Σ [] EMP
-| I_Star Σ 𝕋 P τ v Q :
-  wf_input Σ 𝕋 P → mk_summary τ v Q ∈ Σ →
-  wf_input Σ (v ⊲ τ :: 𝕋) (Q ∗ P).
-Definition wf_pre Σ τs vs P := wf_input Σ (vs [⊲] τs) P ∧ length vs = length τs.
+  wf_witness Σ skip [] EMP
+| I_Star Σ e 𝕋 P τ v Q s :
+  wf_witness Σ e 𝕋 P → mk_summary τ v Q s ∈ Σ →
+  wf_witness Σ (Let <> s e) (v ⊲ τ :: 𝕋) (Q ∗ P).
+Definition wf_src Σ e τs vs P := wf_witness Σ e (vs [⊲] τs) P ∧ length vs = length τs.
 
 (* Type refutation algorithm *)
-Definition try_refute Λ Σ (ς : option summary) :=
+Definition try_refute Λ Σ (ς : summary + expr) :=
   (* Postcondition [ε: Q] is reachable with output type τ *)
-  ∃ τ Q ε, derivable_post Λ (wf_pre Σ) τ Q ε ∧ sat Q ∧
+  ∃ e τ Q ε, derivable_post Λ (wf_src Σ) e τ Q ε ∧ sat Q ∧
   (* A new summary for τ is learned iff termination is successful *)
-  ς = match ε with Ok v => Some (mk_summary τ v Q) | _ => None end.
+  ς = match ε with Ok v => inl (mk_summary τ v Q e) | _ => inr e end.
 (* Well-formed type summary contexts *)
 Inductive wf_summ_ctx : library → summ_ctx → Prop :=
 | R_Nil Λ : 
   wf_summ_ctx Λ []
 | R_Cons Λ Σ ς :
-  wf_summ_ctx Λ Σ → try_refute Λ Σ (Some ς) →
+  wf_summ_ctx Λ Σ → try_refute Λ Σ (inl ς) →
   wf_summ_ctx Λ (ς :: Σ).
 
 (* Semantic interpretation of valid inputs *)
-Definition valid_input Σ 𝕋 P :=
-  ∃ Σ', Σ' ⊆ Σ ∧ P = [∗ map post Σ', id] ∧ 𝕋 = map ret Σ' [⊲] map ty Σ'.
+Notation witness_program Σ := (foldr (λ ς e, Let <> (src ς) e) skip Σ).
+Definition valid_witness Σ e 𝕋 P :=
+  ∃ Σ', Σ' ⊆ Σ ∧
+    e = witness_program Σ' ∧
+    𝕋 = map ret Σ' [⊲] map ty Σ' ∧
+    P = [∗ map post Σ', id].
 (* Soundness *)
-Theorem input_soundness Σ 𝕋 P :
-  wf_input Σ 𝕋 P → valid_input Σ 𝕋 P.
+Theorem input_soundness Σ e 𝕋 P :
+  wf_witness Σ e 𝕋 P → valid_witness Σ e 𝕋 P.
 Proof.
   intros Hinput. induction Hinput.
   + exists []. by split; first apply list_subseteq_nil.
-  + destruct IHHinput as [Σ' [Hsub [-> ->]]].
-    set (ς := {| ty := τ; ret := v; post := Q |}).
+  + destruct IHHinput as [Σ' [Hsub [-> [-> ->]]]].
+    set (ς := {| ty := τ; ret := v; post := Q ; src := s|}).
     exists (ς :: Σ'). split; last done. by apply list_subseteq_cons_iff.
 Qed.
 
@@ -79,43 +84,43 @@ Proof.
 Qed.
 
 (* A [main] function starts from [EMP] and only has [safe] calls to the library *)
-Definition reachable_from_main Λ Σ (Q : asrt) (ε : exit) :=
-  ∃ e, only_safe_calls Λ Σ e ∧ ux_frame_triple (impls Λ) e EMP Q ε.
+Definition reachable_from_main Λ Σ e (Q : asrt) (ε : exit) :=
+  only_safe_calls Λ Σ e ∧ ux_frame_triple (impls Λ) e EMP Q ε.
 (* Properties *)
-Lemma reachable_from_main_subseteq Λ Σ Σ' Q ε :
-  reachable_from_main Λ Σ' Q ε → Σ' ⊆ Σ → reachable_from_main Λ Σ Q ε.
+Lemma reachable_from_main_subseteq Λ Σ Σ' e Q ε :
+  reachable_from_main Λ Σ' e Q ε → Σ' ⊆ Σ → reachable_from_main Λ Σ e Q ε.
 Proof.
-  intros [e [Hsafe Hreach]] Hsub.
-  by eexists; split; first eapply only_safe_calls_subseteq.
+  intros [Hsafe Hreach] Hsub.
+  by split; first eapply only_safe_calls_subseteq.
 Qed.
 
 (* Semantic interpretation of valid summaries *)
 Definition valid_summ_ctx Λ Σ :=
-  ∀ ς, ς ∈ Σ → reachable_from_main Λ Σ (post ς) (Ok (ret ς)).
+  ∀ ς, ς ∈ Σ → reachable_from_main Λ Σ (src ς) (post ς) (Ok (ret ς)).
 (* Properties *)
 Lemma subseteq_reachable Λ Σ Σ' :
   valid_summ_ctx Λ Σ → Σ' ⊆ Σ →
-  ∃ v, reachable_from_main Λ Σ ([∗ map post Σ', id]) (Ok v).
+  ∃ v, reachable_from_main Λ Σ (witness_program Σ') ([∗ map post Σ', id]) (Ok v).
 Proof.
   intros Hsumm Hsub. induction Σ'.
-  + simpl. exists VUnit, (Pure (PVal VUnit)).
+  + simpl. exists VUnit.
     by split; last apply pure_spec.
   + simpl. unfold valid_summ_ctx in Hsumm.
     eapply list_subseteq_cons_iff in Hsub as [Hin Hsub].
-    apply Hsumm in Hin as [e [Hsafe Htriple]].
-    apply IHΣ' in Hsub as [v [e' [Hsafe' Htriple']]].
-    exists v, (Let <> e e'); split; first done.
+    apply Hsumm in Hin as [Hsafe Htriple].
+    apply IHΣ' in Hsub as [v [Hsafe' Htriple']].
+    exists v; split; first done.
     by eapply let_spec; last eapply frame_spec.
 Qed.
-Lemma derivable_for_main Λ Σ τ Q ε :
-  valid_summ_ctx Λ Σ → derivable_post Λ (wf_pre Σ) τ Q ε →
-  reachable_from_main Λ Σ Q ε.
+Lemma derivable_for_main Λ Σ e τ Q ε :
+  valid_summ_ctx Λ Σ → derivable_post Λ (wf_src Σ) e τ Q ε →
+  reachable_from_main Λ Σ e Q ε.
 Proof.
-  intros Hsumm [f [τs [Htype [vs [P [[Hinput Hlen] [L Hspec%ux_frame_soundness]]]]]]].
-  apply input_soundness in Hinput as [Σ'' [Hsub' [-> H𝕋]]].
+  intros Hsumm [f [τs [Htype [s [vs [P [[Hinput Hlen] [-> [L Hspec%ux_frame_soundness]]]]]]]]].
+  apply input_soundness in Hinput as [Σ'' [Hsub' [-> [H𝕋 ->]]]].
   specialize (subseteq_reachable _ _ _ Hsumm Hsub') as [? Hreach].
-  destruct Hreach as [e [Hsafe Htriple]].
-  exists (Let <> e (Call f (TVals vs))). split.
+  destruct Hreach as [Hsafe Htriple].
+  split.
   + split; first by eapply only_safe_calls_subseteq.
     eexists; split; first done. do 2 eexists; split; first done.
     exists Σ''. split; first by etrans.
@@ -129,7 +134,7 @@ Proof.
   intros Hsumm. induction Hsumm.
   + inversion 1.
   + intros ς' Hin. apply elem_of_cons in Hin as [<-|Hin].
-    - destruct H as [τ [Q [ε [Hpost [Hsat Hε]]]]].
+    - destruct H as [e [τ [Q [ε [Hpost [Hsat Hε]]]]]].
       destruct ε; try done. inversion Hε; subst; clear Hε.
       eapply derivable_for_main in IHHsumm as Hreach; last done.
       by eapply reachable_from_main_subseteq; last apply list_subseteq_cons.
@@ -138,18 +143,19 @@ Proof.
 Qed.
 
 (* A type assignment in the library can be refuted *)
-Definition has_refuted_type Λ :=
-  ∃ Σ, wf_summ_ctx Λ Σ ∧ try_refute Λ Σ None.
+Definition has_refuted_type Λ e :=
+  ∃ Σ, wf_summ_ctx Λ Σ ∧ try_refute Λ Σ (inr e).
 (* A [main] program exhibits undefined behaviour *)
-Definition inadequate Λ :=
-  ∃ e h, (impls Λ) ⊢ ⟨ ∅ | e ⟩ ⇓ ⟨ h | Err ⟩ ∧
+Definition inadequate Λ e :=
+  ∃ h, (impls Λ) ⊢ ⟨ ∅ | e ⟩ ⇓ ⟨ h | Err ⟩ ∧
   ∃ Σ, valid_summ_ctx Λ Σ ∧ only_safe_calls Λ Σ e.
 (* Adequacy result for refuted type assignments *)
-Theorem inadequacy Λ :
-  has_refuted_type Λ → inadequate Λ.
+Theorem inadequacy Λ e :
+  has_refuted_type Λ e → inadequate Λ e.
 Proof.
-  intros [Σ [Hctx%summ_ctx_soundness [τ [Q [ε [Hpost [Hsat Hε]]]]]]].
-  eapply derivable_for_main in Hpost as [e [Hsafe Hux%ux_triple_preservation]]; last done.
+  intros [Σ [Hctx%summ_ctx_soundness [s [τ [Q [ε [Hpost [Hsat Hε]]]]]]]].
+  eapply derivable_for_main in Hpost as [Hsafe Hux%ux_triple_preservation]; last done.
   destruct Hsat as [?[?[->]]%Hux].
-  do 2 eexists. split; last by eexists. by destruct ε.
+  destruct ε; inversion Hε; subst.
+  all: by eexists; split; last by eexists.
 Qed.
