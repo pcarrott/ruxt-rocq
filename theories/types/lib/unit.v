@@ -3,6 +3,7 @@ From RUXt.types Require Export type.
 
 
 Program Definition unit : type := {|
+  ty_name := "unit";
   ty_size := 1;
   ty_own vs := match vs with
                | [VUnit] => ⌞ True ⌟

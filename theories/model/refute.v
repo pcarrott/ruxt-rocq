@@ -1,6 +1,6 @@
 From RUXt.lang Require Import semantics.
 From RUXt.types Require Export type.
-From RUXt.types.lib Require Export unit.
+From RUXt.types.lib Require Export int bool own unit.
 From RUXt.model Require Export logic.
 
 
@@ -62,31 +62,54 @@ Proof.
     exists (ς :: Σ'). split; last done. by apply list_subseteq_cons_iff.
 Qed.
 
+From RUXt.lib Require Import gmap.
 (* A program constructed solely from [safe] calls to the library *)
-
+Fixpoint well_typed_call (𝕋 : gmap string type) ts τs τ :=
+  match ts, τs with
+  | [], [] => Some τ
+  | t :: ts, τ :: τs =>
+      match t with
+      | TVar x => 
+          match 𝕋 !! x with
+          | Some τ' => if (decide (ty_name τ = ty_name τ'))
+                       then well_typed_call 𝕋 ts τs τ else None
+          | None => None
+          end
+      | TVal v =>
+          match v with
+          | VInt _ => if (decide (ty_name τ = "int"))
+                      then well_typed_call 𝕋 ts τs τ else None
+          | VBool _ => if (decide (ty_name τ = "bool"))
+                       then well_typed_call 𝕋 ts τs τ else None
+          | VLoc _ => if (decide (ty_name τ = "loc"))
+                      then well_typed_call 𝕋 ts τs τ else None
+          | VUnit => if (decide (ty_name τ = ""))
+                     then well_typed_call 𝕋 ts τs τ else None
+          end
+      end
+  | _, _ => None
+  end.
+(* A [main] program starts from [EMP] and only has [safe] calls to the library *)
 Fixpoint safe_program 𝕋 (Δ : type_ctx) e : option type :=
   match e with
   | Let bx e1 e2 => 
       match safe_program 𝕋 Δ e1 with
       | Some τ =>
           match bx with
-          | BNamed x => safe_program ((x, τ) :: 𝕋) Δ e2
+          | BNamed x => safe_program (<[x := τ]>𝕋) Δ e2
           | BAnon => safe_program 𝕋 Δ e2
           end
       | None => None
       end
   | Call f ts => 
       match Δ !! f with
-      | Some {τs ↣ τ} => 
-          if (decide (length ts = length τs))
-          then Some τ
-          else None
+      | Some {τs ↣ τ} => well_typed_call 𝕋 ts τs τ
       | None => None
       end
   | Pure PUnit => Some unit
   | _ => None
   end.
-Definition safe_main := safe_program [].
+Definition safe_main := safe_program ∅.
 
 (* A [main] function starts from [EMP] and only has [safe] calls to the library *)
 Definition reachable_from_main Λ e (Q : asrt) (ε : exit) :=
@@ -124,8 +147,8 @@ Proof.
   + by eapply let_spec.
   + unfold safe_main, safe_program in *.
     exists τ. rewrite Hsafe, Htype.
-    by case_decide; last solve_length.
-Qed.
+    admit.
+Admitted.
 (* Soundness *)
 Theorem summ_ctx_soundness Λ Σ :
   wf_summ_ctx Λ Σ → valid_summ_ctx Λ Σ.

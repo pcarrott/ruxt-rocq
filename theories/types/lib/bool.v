@@ -3,6 +3,7 @@ From RUXt.types Require Export type.
 
 
 Program Definition bool : type := {|
+  ty_name := "bool";
   ty_size := 1;
   ty_own vs := match vs with
                | [VBool _] => ⌞ True ⌟

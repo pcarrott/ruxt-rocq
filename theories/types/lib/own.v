@@ -4,6 +4,7 @@ From RUXt.types Require Export type.
 
 
 Program Definition own (τ : option type) : type := {|
+  ty_name := "loc";
   ty_size := 1;
   ty_own vs := match vs with
                | [VLoc l] => match τ with
