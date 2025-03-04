@@ -1,5 +1,6 @@
 From RUXt.lang Require Import semantics.
 From RUXt.types Require Export type.
+From RUXt.types.lib Require Export unit.
 From RUXt.model Require Export logic.
 
 
@@ -62,70 +63,68 @@ Proof.
 Qed.
 
 (* A program constructed solely from [safe] calls to the library *)
-Fixpoint only_safe_calls Λ Σ e :=
+
+Fixpoint safe_program 𝕋 (Δ : type_ctx) e : option type :=
   match e with
-  | Let _ e1 e2 => only_safe_calls Λ Σ e1 ∧ only_safe_calls Λ Σ e2
-  | Call f ts => ∃ vs, ts = TVals vs ∧ ∃ τs τ, (types Λ) !! f = Some {τs ↣ τ} ∧
-                 ∃ Σ', Σ' ⊆ Σ ∧ vs = map ret Σ' ∧ τs = map ty Σ'
-  | Pure PUnit => True
-  | _ => False
+  | Let bx e1 e2 => 
+      match safe_program 𝕋 Δ e1 with
+      | Some τ =>
+          match bx with
+          | BNamed x => safe_program ((x, τ) :: 𝕋) Δ e2
+          | BAnon => safe_program 𝕋 Δ e2
+          end
+      | None => None
+      end
+  | Call f ts => 
+      match Δ !! f with
+      | Some {τs ↣ τ} => 
+          if (decide (length ts = length τs))
+          then Some τ
+          else None
+      | None => None
+      end
+  | Pure PUnit => Some unit
+  | _ => None
   end.
-(* Properties *)
-Lemma only_safe_calls_subseteq Δ Σ Σ' e :
-  only_safe_calls Δ Σ' e → Σ' ⊆ Σ → only_safe_calls Δ Σ e.
-Proof.
-  intros Hsafe Hsub. induction e; try done.
-  + destruct Hsafe as []. split.
-    - by apply IHe1.
-    - by apply IHe2.
-  + destruct Hsafe as [? [-> [? [? [Htype [Σ'' [Hsub' [-> ->]]]]]]]].
-    eexists; split; first done. do 2 eexists; split; first done.
-    exists Σ''. by split; first etrans.
-Qed.
+Definition safe_main := safe_program [].
 
 (* A [main] function starts from [EMP] and only has [safe] calls to the library *)
-Definition reachable_from_main Λ Σ e (Q : asrt) (ε : exit) :=
-  only_safe_calls Λ Σ e ∧ ux_frame_triple (impls Λ) e EMP Q ε.
-(* Properties *)
-Lemma reachable_from_main_subseteq Λ Σ Σ' e Q ε :
-  reachable_from_main Λ Σ' e Q ε → Σ' ⊆ Σ → reachable_from_main Λ Σ e Q ε.
-Proof.
-  intros [Hsafe Hreach] Hsub.
-  by split; first eapply only_safe_calls_subseteq.
-Qed.
+Definition reachable_from_main Λ e (Q : asrt) (ε : exit) :=
+  ux_frame_triple (impls Λ) e EMP Q ε ∧ ∃ τ, safe_main (types Λ) e = Some τ.
 
 (* Semantic interpretation of valid summaries *)
-Definition valid_summ_ctx Λ Σ :=
-  ∀ ς, ς ∈ Σ → reachable_from_main Λ Σ (src ς) (post ς) (Ok (ret ς)).
+Definition valid_summ_ctx Λ (Σ : summ_ctx) :=
+  ∀ ς, ς ∈ Σ → reachable_from_main Λ (src ς) (post ς) (Ok (ret ς)).
 (* Properties *)
 Lemma subseteq_reachable Λ Σ Σ' :
   valid_summ_ctx Λ Σ → Σ' ⊆ Σ →
-  ∃ v, reachable_from_main Λ Σ (witness_program Σ') ([∗ map post Σ', id]) (Ok v).
+  ∃ v, reachable_from_main Λ (witness_program Σ') ([∗ map post Σ', id]) (Ok v).
 Proof.
   intros Hsumm Hsub. induction Σ'.
   + simpl. exists VUnit.
-    by split; last apply pure_spec.
+    by split; first apply pure_spec; last eexists.
   + simpl. unfold valid_summ_ctx in Hsumm.
     eapply list_subseteq_cons_iff in Hsub as [Hin Hsub].
-    apply Hsumm in Hin as [Hsafe Htriple].
-    apply IHΣ' in Hsub as [v [Hsafe' Htriple']].
-    exists v; split; first done.
-    by eapply let_spec; last eapply frame_spec.
+    apply Hsumm in Hin as [Htriple [τ Hsafe]].
+    apply IHΣ' in Hsub as [v [Htriple' [τ' Hsafe']]].
+    exists v. split.
+    - by eapply let_spec; last eapply frame_spec.
+    - unfold safe_main, safe_program in *.
+      exists τ'. by rewrite Hsafe, Hsafe'.
 Qed.
 Lemma derivable_for_main Λ Σ e τ Q ε :
   valid_summ_ctx Λ Σ → derivable_post Λ (wf_src Σ) e τ Q ε →
-  reachable_from_main Λ Σ e Q ε.
+  reachable_from_main Λ e Q ε.
 Proof.
   intros Hsumm [f [τs [Htype [s [vs [P [[Hinput Hlen] [-> [L Hspec%ux_frame_soundness]]]]]]]]].
   apply input_soundness in Hinput as [Σ'' [Hsub' [-> [H𝕋 ->]]]].
   specialize (subseteq_reachable _ _ _ Hsumm Hsub') as [? Hreach].
-  destruct Hreach as [Hsafe Htriple].
+  destruct Hreach as [Htriple [τ' Hsafe]].
   split.
-  + split; first by eapply only_safe_calls_subseteq.
-    eexists; split; first done. do 2 eexists; split; first done.
-    exists Σ''. split; first by etrans.
-    apply (zip_with_inj TyOwn); try done; solve_length.
   + by eapply let_spec.
+  + unfold safe_main, safe_program in *.
+    exists τ. rewrite Hsafe, Htype.
+    by case_decide; last solve_length.
 Qed.
 (* Soundness *)
 Theorem summ_ctx_soundness Λ Σ :
@@ -136,10 +135,8 @@ Proof.
   + intros ς' Hin. apply elem_of_cons in Hin as [<-|Hin].
     - destruct H as [e [τ [Q [ε [Hpost [Hsat Hε]]]]]].
       destruct ε; try done. inversion Hε; subst; clear Hε.
-      eapply derivable_for_main in IHHsumm as Hreach; last done.
-      by eapply reachable_from_main_subseteq; last apply list_subseteq_cons.
-    - apply IHHsumm in Hin as Hreach.
-      by eapply reachable_from_main_subseteq; last apply list_subseteq_cons.
+      by eapply derivable_for_main in IHHsumm as Hreach.
+    - by apply IHHsumm in Hin as Hreach.
 Qed.
 
 (* A type assignment in the library can be refuted *)
@@ -147,14 +144,13 @@ Definition has_refuted_type Λ e :=
   ∃ Σ, wf_summ_ctx Λ Σ ∧ try_refute Λ Σ (inr e).
 (* A [main] program exhibits undefined behaviour *)
 Definition inadequate Λ e :=
-  ∃ h, (impls Λ) ⊢ ⟨ ∅ | e ⟩ ⇓ ⟨ h | Err ⟩ ∧
-  ∃ Σ, valid_summ_ctx Λ Σ ∧ only_safe_calls Λ Σ e.
+  ∃ h, (impls Λ) ⊢ ⟨ ∅ | e ⟩ ⇓ ⟨ h | Err ⟩ ∧ ∃ τ, safe_main (types Λ) e = Some τ.
 (* Adequacy result for refuted type assignments *)
 Theorem inadequacy Λ e :
   has_refuted_type Λ e → inadequate Λ e.
 Proof.
   intros [Σ [Hctx%summ_ctx_soundness [s [τ [Q [ε [Hpost [Hsat Hε]]]]]]]].
-  eapply derivable_for_main in Hpost as [Hsafe Hux%ux_triple_preservation]; last done.
+  eapply derivable_for_main in Hpost as [Hux%ux_triple_preservation []]; last done.
   destruct Hsat as [?[?[->]]%Hux].
   destruct ε; inversion Hε; subst.
   all: by eexists; split; last by eexists.
