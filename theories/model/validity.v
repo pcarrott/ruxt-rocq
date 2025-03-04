@@ -33,11 +33,11 @@ Qed.
 Definition valid_pre τs vs P := ⊨ (P →ₕ [∗ₜ vs [⊲] boxes τs]).
 Definition type_sound Λ := valid_type_ctx (impls Λ) (types Λ).
 (* Derivable states must satisfy the output type invariant *)
-Theorem principle_of_validity Λ L τ Q ε :
-  type_sound Λ → derivable_post Λ L valid_pre τ Q ε →
+Theorem principle_of_validity Λ τ Q ε :
+  type_sound Λ → derivable_post Λ valid_pre τ Q ε →
   ⊨ (Q →ₕ (∃ₕ v, (⌞ ε = Ok v ⌟ ∗ [∗ₜ [v ⊲ box τ]]))).
 Proof.
-  intros HenvT [f [τs [Htype [vs [P [HP Hspec]]]]]].
+  intros HenvT [f [τs [Htype [vs [P [HP [L Hspec]]]]]]].
   (* Obtain the OX triple *)
   eapply HenvT in Htype as [xs [e [Himpl Hox]]].
   (* Obtain the UX triple *)
@@ -47,12 +47,12 @@ Proof.
 Qed.
 (* Undefined behaviour is provably reachable *)
 Definition ub_derivable Λ :=
-  ∃ L τ Q ε, derivable_post Λ L valid_pre τ Q ε ∧ sat Q ∧ ¬ ∃ v, ε = Ok v.
+  ∃ τ Q ε, derivable_post Λ valid_pre τ Q ε ∧ sat Q ∧ ¬ ∃ v, ε = Ok v.
 (* Type-sound libraries must never exhibit undefined behaviour *)
 Theorem type_unsoundness Λ :
   ub_derivable Λ → ¬ type_sound Λ.
 Proof.
-  intros [?[?[?[?[?[[? Hsat] Hε]]]]]] Hsound.
+  intros [?[?[?[?[[? Hsat] Hε]]]]] Hsound.
   eapply principle_of_validity in Hsound; last done.
   apply Hsound in Hsat as [?[?[?[?[?[[_ ?] _]]]]]].
   by apply Hε; eexists.
