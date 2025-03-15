@@ -6,7 +6,6 @@ From RUXt.lang Require Export lang assertion.
 
 (* Language types *)
 Record type := {
-  ty_name : string;
   ty_size : nat;
   ty_own : list val → asrt;
   ty_size_eq vs : ty_own vs ⊨ ⌞ length vs = ty_size ⌟;

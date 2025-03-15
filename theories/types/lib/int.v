@@ -3,7 +3,6 @@ From RUXt.types Require Export type.
 
 
 Program Definition int : type := {|
-  ty_name := "int";
   ty_size := 1;
   ty_own vs := match vs with
                | [VInt _] => ⌞ True ⌟

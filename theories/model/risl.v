@@ -10,11 +10,35 @@ Record fun_spec := mk_fun_spec { vals : list val; pre : asrt; tag : exit; post :
 Notation "⌈ ( vs ) P | ε , Q ⌉" := (mk_fun_spec vs P ε Q).
 Definition spec_ctx := gmap string (list fun_spec).
 (* Overloading definitions *)
-Definition empty (γ : impl_ctx) : spec_ctx := (λ _, []) <$> γ.
-Definition update spec f (Γ : spec_ctx) := alter (cons spec) f Γ.
-Definition subseteq (Γ Γ' : spec_ctx) : Prop :=
-  ∀ f s, Γ !! f = Some s → ∃ s', Γ' !! f = Some s' ∧ s ⊆ s'.
+Definition spec_cons (s : fun_spec) o :=
+  match o with None => Some [s] | Some l => Some (s :: l) end.
+Definition update s f (Γ : spec_ctx) := partial_alter (spec_cons s) f Γ.
+Definition subseteq (Γ Γ' : spec_ctx) : Prop := ∀ f, Γ !!! f ⊆ Γ' !!! f.
 Notation "Γ [⊆] Γ'" := (subseteq Γ Γ') (at level 50).
+(* Properties *)
+Lemma lookup_total_update m i x :
+  update x i m !!! i = x :: m !!! i.
+Proof.
+  rewrite (lookup_total_alt (update _ _ m)).
+  unfold update, default. rewrite (lookup_partial_alter _ m).
+  destruct (m !! i) as [l|] eqn:Heq.
+  + replace (m !! i) with (Some l).
+    by rewrite (lookup_total_correct m i l).
+  + rewrite (lookup_total_alt m i).
+    by replace (m !! i) with (None : option (list fun_spec)).
+Qed.
+Lemma lookup_total_update_ne m i j x :
+  i ≠ j → update x i m !!! j = m !!! j.
+Proof.
+  intros Hneq. rewrite (lookup_total_alt m).
+  unfold update, default. case_match.
+  + eapply lookup_total_correct.
+    by rewrite (lookup_partial_alter_ne _ m).
+  + rewrite (lookup_total_alt (partial_alter _ _ m)).
+    by replace (partial_alter (spec_cons x) i m !! j)
+      with (None : option (list fun_spec));
+      last rewrite (lookup_partial_alter_ne _ m).
+Qed.
 
 (* Frameable assertions *)
 Definition frameable (ε : exit) (R : asrt) : Prop :=
@@ -99,8 +123,8 @@ Inductive wf_spec : spec_ctx → asrt → expr → exit → asrt → Prop :=
 | S_Exists Γ e P Q ε X :
   Γ ⊢ ⌈ P ⌉ e ⌈ ε, Q ⌉ →
   Γ ⊢ ⌈ ∃ₕ x ⋮ X, P ⌉ e ⌈ ε, ∃ₕ x ⋮ X, Q ⌉
-| S_Call Γ f vs P Q ε s :
-  Γ !! f = Some s → ⌈(vs) P | ε, Q⌉ ∈ s →
+| S_Call Γ f vs P Q ε :
+  ⌈(vs) P | ε, Q⌉ ∈ Γ !!! f →
   Γ ⊢ ⌈ P ⌉ Call f (TVals vs) ⌈ ε , Q ⌉
 where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (wf_spec Γ P e ε Q).
 
@@ -108,7 +132,7 @@ where "Γ ⊢ ⌈ P ⌉ e ⌈ ε , Q ⌉" := (wf_spec Γ P e ε Q).
 Reserved Notation "γ ≺ₛ Γ" (at level 50).
 Inductive wf_spec_ctx : impl_ctx → spec_ctx → Prop :=
 | E_Empty γ :
-  γ ≺ₛ empty γ
+  γ ≺ₛ ∅
 | E_Update γ Γ Γ' P Q ε f xs e vs :
   γ ≺ₛ Γ → γ !! f = Some {(xs) e} →
   Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε , Q ⌉ →
@@ -121,7 +145,7 @@ where "γ ≺ₛ Γ" := (wf_spec_ctx γ Γ).
 
 (* Proof rule definition *)
 Definition valid_spec_ctx (γ : impl_ctx) (Γ : spec_ctx) : Prop :=
-  ∀ f s, Γ !! f = Some s → ∀ vs P Q ε, ⌈(vs) P | ε, Q⌉ ∈ s →
+  ∀ f vs P Q ε, ⌈(vs) P | ε, Q⌉ ∈ Γ !!! f →
   ∃ xs e, γ !! f = Some {(xs) e} ∧ ux_frame_triple γ (e⌊vs[//]xs⌋) P Q ε.
 Definition valid_spec (Γ : spec_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
   ∀ γ, valid_spec_ctx γ Γ → ux_frame_triple γ e P Q ε.
@@ -129,9 +153,8 @@ Definition valid_spec (Γ : spec_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop
 Lemma spec_ctx_inclusion (γ : impl_ctx) (Γ Γ' : spec_ctx) :
   valid_spec_ctx γ Γ → Γ' [⊆] Γ → valid_spec_ctx γ Γ'.
 Proof.
-  intros Hval Hsub f s' Hsome' vs P Q ε Hin'.
-  specialize (Hsub _ _ Hsome') as [s [Hsome Hsub]].
-  by eapply Hval; last eapply elem_of_subseteq.
+  intros Hval Hsub f vs P Q ε Hin.
+  by eapply Hval, Hsub; last eapply elem_of_subseteq.
 Qed.
 
 (* Soundness of proof rules *)
@@ -241,8 +264,8 @@ Proof.
   + apply IHrule in Hval as Hux.
     intros h' [v [h [HP Hstep]]%Hux].
     eexists. by split; first by eexists.
-  + assert (Γ !! f = Some s ∧ ⌈(vs) P | ε, Q⌉ ∈ s) as [HΓsome Hspec] by done.
-    eapply Hval in HΓsome as [xs [e [Hγsome Hux]]]; first done.
+  + assert (⌈(vs) P | ε, Q⌉ ∈ Γ !!! f) as Hspec by assumption.
+    eapply Hval in Hspec as [xs [e [Hγsome Hux]]].
     intros h' [h [HP Hstep]]%Hux.
     eexists. by split; last (subst; eapply F_Call).
 Qed.
@@ -252,15 +275,17 @@ Theorem spec_ctx_soundness γ Γ :
   γ ≺ₛ Γ → valid_spec_ctx γ Γ.
 Proof.
   intros rule; induction rule; subst.
-  + intros f s HΓsome vs P Q ε Hin.
-    apply lookup_fmap_Some in HΓsome as [_[<- _]].
-    exfalso. inversion Hin.
-  + intros f' s HΓsome vs' P' Q' ε' Hin. unfold update in HΓsome.
-    apply lookup_alter_Some in HΓsome as [[<- [? [? ->]]]|[]]; last by eapply IHrule.
-    assert (Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉) as Hrule by assumption.    
-    specialize (spec_soundness _ _ _ _ _ Hrule _ IHrule) as Hux.
-    apply elem_of_cons in Hin as [Heq|]; last by eapply IHrule.
-    inversion Heq; subst. by do 2 eexists.
+  + inversion 1.
+  + intros f' vs' P' Q' ε' Hin.
+    destruct (decide (f = f')) as [<-|].
+    - rewrite lookup_total_update in Hin.
+      apply elem_of_cons in Hin as [Heq|].
+      * assert (Γ ⊢ ⌈ P ⌉ e⌊vs[//]xs⌋ ⌈ ε, Q ⌉) as Hrule by assumption.    
+        specialize (spec_soundness _ _ _ _ _ Hrule _ IHrule) as Hux.
+        inversion Heq; subst. by do 2 eexists.
+      * by eapply IHrule.
+    - rewrite lookup_total_update_ne in Hin; last done.
+      by eapply IHrule.
 Qed.
 
 (* Instantiate RISL for the refutation algorithm *)

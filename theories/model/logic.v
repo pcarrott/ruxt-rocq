@@ -25,12 +25,6 @@ Proof.
 Qed.
 
 (* UX properties *)
-Lemma pure_spec γ v :
-  ux_frame_triple γ (Pure (PVal v)) EMP EMP (Ok v).
-Proof.
-  intros ? ?. eexists.
-  by split; last apply F_Pure.
-Qed.
 Lemma let_spec γ x e1 e2 P Q R v ε :
   ux_frame_triple γ e1 P R (Ok v) → ux_frame_triple γ (e2⌊v//x⌋) R Q ε →
   ux_frame_triple γ (Let x e1 e2) P Q ε.
@@ -38,22 +32,15 @@ Proof.
   intros Hux1 Hux2 ? [?[[?[]]%Hux1]]%Hux2. eexists.
   by split; last eapply F_Let.
 Qed.
-Lemma frame_spec γ e P Q v :
-  ux_frame_triple γ e EMP Q (Ok v) →
-  ux_frame_triple γ e P (P ∗ Q) (Ok v).
+Lemma frame_app_spec {X : Type} γ e xs x (P : X → asrt) v :
+  ux_frame_triple γ e EMP (P x) (Ok v) →
+  ux_frame_triple γ e ([∗ xs, P]) ([∗ xs ++ [x], P]) (Ok v).
 Proof.
-  intros Hux ? [hP [hQ [-> [?[? [?[-> Hstep]]%Hux]]]]]. eexists.
-  split; last eapply frame_addition in Hstep as [[Hstep]|[?[]]]; try done.
-  by rewrite (map_empty_union hP), (map_union_comm hQ hP) in Hstep.
-Qed.
-Lemma call_spec γ f xs e vs P Q ε :
-  γ !! f = Some { (xs) e} →
-  ux_frame_triple γ (Call f (TVals vs)) P Q ε ↔ ux_frame_triple γ (e ⌊ vs [//] xs ⌋) P Q ε.
-Proof.
-  intros HSome. split.
-  + intros Hux ? [?[? Hcall]]%Hux.
-    inversion Hcall; rewrite H4 in HSome; inversion HSome; subst.
-    by eexists.
-  + intros Hux ? [?[]]%Hux.
-    eexists. by split; last eapply F_Call.
+  intros Hux ? Happ. apply hiter_app in Happ as [hxs [hx [-> [Hdisj [HPxs HPx]]]]].
+  eexists; split; first done.
+  destruct HPx as [hx' [? [Hhx [_ [HPx ->]]]]].
+  rewrite (map_union_empty hx') in Hhx. rewrite <- Hhx in *; clear Hhx.
+  apply Hux in HPx as [? [-> Hstep]].
+  eapply frame_addition in Hstep as [[Hstep]|[?[]]]; try done.
+  by rewrite (map_empty_union hxs), (map_union_comm hx hxs) in Hstep.
 Qed.

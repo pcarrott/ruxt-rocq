@@ -1,5 +1,6 @@
 From stdpp Require Export binders.
 From stdpp Require Import countable.
+From RUXt.lib Require Import list gmap.
 
 
 (* Memory locations *)
@@ -42,6 +43,7 @@ Inductive expr :=
 
 (* Syntactic sugar *)
 Notation TVals vs := (TVal <$> vs).
+Notation TVars vs := (TVar <$> vs).
 Notation PVal v := (Term (TVal v)). Notation PVar x := (Term (TVar x)).
 Notation TInt z := (TVal (VInt z)). Notation PInt z := (Term (TInt z)).
 Notation TBool b := (TVal (VBool b)). Notation PBool b := (Term (TBool b)).
@@ -263,12 +265,20 @@ Proof.
 Qed.
 
 
-(*** Substitution ***)
+(*** Substitution and closed expressions ***)
 
-(* Variables *)
+(* Terms *)
+Definition closed_term (X : gset string) (t : term) : Prop :=
+  match t with TVar x => x ∈ X | TVal _ => True end.
 Definition subst_in_term (x : string) (t : term) (T : term) : term :=
   if decide (T = TVar x) then t else T.
-(* Pure expressions *)
+(* Pure expressions  *)
+Fixpoint closed_pure (X : gset string) (p : pure) : Prop :=
+  match p with
+  | Term t => closed_term X t
+  | UnOp _ p => closed_pure X p
+  | BinOp _ p1 p2 => closed_pure X p1 ∧ closed_pure X p2
+  end.
 Fixpoint subst_in_pure (x : string) (t : term) (p : pure) : pure :=
   match p with
   | Term T => Term (subst_in_term x t T)
@@ -276,6 +286,21 @@ Fixpoint subst_in_pure (x : string) (t : term) (p : pure) : pure :=
   | BinOp op p1 p2 => BinOp op (subst_in_pure x t p1) (subst_in_pure x t p2)
   end.
 (* Program expressions *)
+Fixpoint closed_expr (X : gset string) (e : expr) : Prop :=
+  match e with
+  | Pure p => closed_pure X p
+  | Error => True
+  | Assume t => closed_term X t
+  | Let bx e1 e2 => closed_expr X e1 ∧
+                    closed_expr (match bx with BAnon => X | BNamed x => X ∪ {[x]} end) e2
+  | Choice e1 e2 => closed_expr X e1 ∧ closed_expr X e2
+  | Alloc t => closed_term X t
+  | Free t => closed_term X t
+  | Store t1 t2 => closed_term X t1 ∧ closed_term X t2
+  | Load t => closed_term X t
+  | Call _ ts => Forall (closed_term X) ts
+  end.
+Definition closed_program (e : expr) : Prop := closed_expr ∅ e.
 Fixpoint subst_in_expr (x : string) (t : term) (e : expr) : expr :=
   match e with
   | Pure p => Pure (subst_in_pure x t p)
@@ -290,46 +315,134 @@ Fixpoint subst_in_expr (x : string) (t : term) (e : expr) : expr :=
   | Load T => Load (subst_in_term x t T)
   | Call f Ts => Call f (subst_in_term x t <$> Ts)
   end.
-Definition subst (x : binder) (v : val) (e : expr) : expr :=
-  match x with BAnon => e | BNamed n => subst_in_expr n (TVal v) e end.
-Notation "e ⌊ v // x ⌋" := (subst x v e) (at level 50).
-(* Multiple substitutions *)
+Definition subst (bx : binder) (v : val) (e : expr) : expr :=
+  match bx with BAnon => e | BNamed x => subst_in_expr x (TVal v) e end.
 Definition subst_terms (xs : list string) (ts : list term) (e : expr) : expr :=
-  foldr (λ xt, subst_in_expr xt.1 xt.2) e (zip xs ts).
+  foldl (λ e xt, subst_in_expr xt.1 xt.2 e) e (zip xs ts).
+
+(* Syntactic sugar *)
+Notation "e ⌊ v // x ⌋" := (subst x v e) (at level 50).
 Notation "e ⌊ ts [//] xs ⌋ₜ" := (subst_terms xs ts e) (at level 50).
 Notation "e ⌊ vs [//] xs ⌋" := (subst_terms xs (TVals vs) e) (at level 50).
 
+
 (* Properties *)
-Lemma subst_anon e v : e ⌊ v // <> ⌋ = e.
-Proof. done. Qed.
-
-
-(*** Closed expressions ***)
-
-(* Terms *)
-Definition closed_term' (X : list string) (t : term) : Prop :=
-  match t with TVar x => x ∈ X | TVal _ => True end.
-Definition closed_term (t : term) : Prop := closed_term' [] t.
-(* Pure expressions  *)
-Fixpoint closed_pure' (X : list string) (p : pure) : Prop :=
-  match p with
-  | Term t => closed_term' X t
-  | UnOp _ p => closed_pure' X p
-  | BinOp _ p1 p2 => closed_pure' X p1 ∧ closed_pure' X p2
-  end.
-Definition closed_pure (p : pure) : Prop := closed_pure' [] p.
-(* Program expressions *)
-Fixpoint closed_expr' (X : list string) (e : expr) : Prop :=
-  match e with
-  | Pure p => closed_pure' X p
-  | Error => True
-  | Assume t => closed_term' X t
-  | Let x e1 e2 => closed_expr' X e1 ∧ closed_expr' (x :b: X) e2
-  | Choice e1 e2 => closed_expr' X e1 ∧ closed_expr' X e2
-  | Alloc t => closed_term' X t
-  | Free t => closed_term' X t
-  | Store t1 t2 => closed_term' X t1 ∧ closed_term' X t2
-  | Load t => closed_term' X t
-  | Call _ ts => Forall (closed_term' X) ts
-  end.
-Definition closed_expr (e : expr) : Prop := closed_expr' [] e.
+Lemma is_closed_term X T : closed_term X T → ∀ x t, x ∉ X → subst_in_term x t T = T.
+Proof.
+  intros Hclosed. destruct T.
+  + intros. simpl in Hclosed. unfold subst_in_term.
+    by case_decide as Heq; first congruence.
+  + intros. unfold subst_in_term. by case_decide.
+Qed.
+Lemma is_closed_pure X p : closed_pure X p → ∀ x t, x ∉ X → subst_in_pure x t p = p.
+Proof.
+  intros Hclosed. induction p; intros; simpl.
+  + by rewrite (is_closed_term X).
+  + by rewrite IHp.
+  + destruct Hclosed as [Hclosed1 Hclosed2].
+    by rewrite IHp1, IHp2.
+Qed.
+Lemma is_closed_expr X e : closed_expr X e → ∀ x t, x ∉ X → subst_in_expr x t e = e.
+Proof.
+  generalize dependent X. induction e; intros X Hclosed x' t' Hnin; simpl in *.
+  + by rewrite (is_closed_pure X).
+  + done.
+  + by rewrite (is_closed_term X).
+  + destruct Hclosed as [Hclosed1 Hclosed2].
+    rewrite (IHe1 X); try done. case_decide; first done.
+    destruct x as [|x].
+    - by rewrite (IHe2 X).
+    - rewrite (IHe2 (X ∪ {[x]})); try done.
+      apply not_elem_of_union. split; first done.
+      apply not_elem_of_singleton. congruence.
+  + destruct Hclosed as [Hclosed1 Hclosed2].
+    by rewrite (IHe1 X), (IHe2 X).
+  + by rewrite (is_closed_term X).
+  + by rewrite (is_closed_term X).
+  + destruct Hclosed as [Hclosed1 Hclosed2].
+    by rewrite 2 (is_closed_term X).
+  + by rewrite (is_closed_term X).
+  + rewrite <- (Forall_fmap_ext_1 id), list_fmap_id; first done.
+    apply Forall_forall. intros ? Hin.
+    eapply Forall_forall in Hin; last done.
+    by rewrite (is_closed_term X).
+Qed.
+Lemma is_closed_program e : closed_program e → ∀ x v, e ⌊ v // x ⌋ = e.
+Proof.
+  intros. unfold subst. destruct x; first done.
+  eapply is_closed_expr; try done; inversion 1.
+Qed.
+Lemma subst_vals_subst e xs vs x v :
+  length xs = length vs →
+  (e⌊ vs [//] xs ⌋)⌊ v // BNamed x ⌋ = e⌊ vs ++ [v] [//] xs ++ [x] ⌋.
+Proof.
+  intros Hlen. unfold subst_terms.
+  rewrite fmap_app, zip_with_app, foldl_app; solve_length.
+Qed.
+Lemma subst_TVals x v (vs : list val) :
+  subst_in_term x v <$> TVals vs = TVals vs.
+Proof.
+  induction vs; first done.
+  simpl. unfold subst_in_term in *.
+  unfold TVals in IHvs. rewrite IHvs.
+  by case_decide.
+Qed.
+Lemma subst_TVars x v (xs : list string) :
+  x ∉ xs → subst_in_term x v <$> TVars xs = TVars xs.
+Proof.
+  induction xs; first done. intros Hnin.
+  simpl. unfold subst_in_term in *.
+  unfold TVars in IHxs. rewrite IHxs; last first.
+  { intros Hin. apply Hnin. apply elem_of_cons. by right. }
+  case_decide; last done. exfalso.
+  apply Hnin. apply elem_of_cons. left. congruence.
+Qed.
+Lemma subst_call_args f xs vs :
+  length xs = length vs → NoDup xs →
+  Call f (TVars xs) ⌊ vs [//] xs ⌋ = Call f (TVals vs).
+Proof.
+  assert (
+    ∀ vs1 vs2, vs = vs1 ++ vs2 → length xs = length vs2 → NoDup xs →
+    Call f (TVals vs1 ++ TVars xs) ⌊ vs2 [//] xs ⌋ = Call f (TVals vs)
+  ) as Hcall.
+  {
+    induction xs as [|x xs]; intros vs1 vs2 Hvs Hlen Hdup.
+    + symmetry in Hlen; apply nil_length_inv in Hlen; subst.
+      by rewrite fmap_app.
+    + destruct vs2 as [|v vs2]; first inversion Hlen.
+      rewrite 2 length_cons in Hlen.
+      assert (length xs = length vs2) as Hlen' by lia.
+      apply NoDup_cons in Hdup as [Hnin Hdup].
+      rewrite cons_middle, app_assoc in Hvs.
+      specialize (IHxs (vs1 ++ [v]) vs2 Hvs Hlen' Hdup) as <-.
+      rewrite fmap_app, <- app_assoc.
+      unfold TVars, subst_terms.
+      simpl; rewrite fmap_app, subst_TVals.
+      rewrite fmap_cons, subst_TVars; last done.
+      unfold subst_in_term; by case_decide.
+  }
+  assert (vs = [] ++ vs) as Hvs by done.
+  specialize (Hcall [] vs Hvs).
+  intros Hlen Hdup. by apply Hcall.
+Qed.
+Lemma let_subst x xs vs e1 e2 :
+  length xs = length vs → x ∉ xs → closed_program e1 →
+  (Let (BNamed x) e1 e2) ⌊vs [//] xs⌋ = Let (BNamed x) e1 (e2⌊vs [//] xs⌋).
+Proof.
+  assert (∃ xs', xs = reverse xs') as [xs' ->].
+  { exists (reverse xs). by rewrite reverse_involutive. }
+  assert (∃ vs', vs = reverse vs') as [vs' ->].
+  { exists (reverse vs). by rewrite reverse_involutive. }
+  generalize dependent vs'. induction xs' as [|y xs]; first done.
+  intros vs Hlen Hnin Hclosed. rewrite reverse_cons in Hnin.
+  apply not_elem_of_app in Hnin as [Hnin Hneq].
+  destruct vs as [|v vs].
+  + rewrite length_reverse, length_cons in Hlen. simpl in Hlen; lia.
+  + rewrite 2 reverse_cons, 2 length_app in Hlen. simpl in Hlen.
+    rewrite 2 reverse_cons. do 2 (rewrite <- subst_vals_subst; last lia).
+    rewrite IHxs; last done; last done; last lia.
+    apply not_elem_of_cons in Hneq as [? _].
+    simpl. case_decide; first congruence.
+    specialize (is_closed_program _ Hclosed y v) as Hclosed'.
+    simpl in Hclosed'. by rewrite Hclosed'.
+Qed.

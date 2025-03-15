@@ -37,7 +37,7 @@ Theorem principle_of_validity Λ e τ Q ε :
   type_sound Λ → derivable_post Λ (λ s, valid_src) e τ Q ε →
   ⊨ (Q →ₕ (∃ₕ v, (⌞ ε = Ok v ⌟ ∗ [∗ₜ [v ⊲ box τ]]))).
 Proof.
-  intros HenvT [f [τs [Htype [_ [vs [P [HP [_ [L Hspec]]]]]]]]].
+  intros HenvT [f [τs [Htype [_ [vs [P [HP [L [Hspec _]]]]]]]]].
   (* Obtain the OX triple *)
   eapply HenvT in Htype as [xs [body [Himpl Hox]]].
   (* Obtain the UX triple *)
