@@ -1,33 +1,34 @@
-# RUXt: Disproving Type Soundness in Unsafe Rust via Under-Approximate Reasoning
+# RUXtBelt: The Semantic Model of RUXt
 
-This Coq development contains a formalization of a simple expression language with function calls, as a simplified model of the Rust programming language. For reasoning about its programs, we formalize two separation logics:
-+ an over-approximate SL, a simplification of the type system of RustBelt;
-+ an under-approximate SL, an adaptation of Incorrectness SL.
-
-The formalization provides key principles that relate both logics. Notably, a derivable UX triple may disprove a type specification in Rust, enabling the detectation of type unsoundness in safe functions with internal unsafe code.
 To compile this Coq development, simply run `make`.
-
 
 ### Prerequisites
 This development is known to compile with
-+ Coq 8.19.2
-+ Coq-std++ 1.10.0
++ Coq 8.20.1
++ Coq-std++ 1.11.0
 
 
 ### Directory Structure
 The `lib/` directory contains auxiliary definitions and lemmas for generic definitions.
++ `list.v`: Additional facts about the `list` type from the `stdpp` library.
 + `gmap.v`: Additional facts about the `gmap` type from the `stdpp` library.
 
-The `lang/` directory contains the formalization of our programming language.
+The `lang/` directory contains the formalization of the semantics for our programming language and assertions.
 + `lang.v`: Language syntax, pure expression evaluation, variable substitution.
 + `semantics.v`: Operational semantics, frame preservation.
++ `assertion.v`: Logical assertions on heaps.
 
-The `assertion/` directory contains the formalization of our assertion language.
-+ `hprop.v`: Logical assertions on heaps.
-+ `types.v`: Generic type definition, assertions for type ownership.
-+ `types/`: Directory containing some default type definitions.
+The `model/` directory contains the formalization of RUXt.
++ `logic.v`: Template for a sound under-approximate program logic.
++ `risl.v`: RISL proof rules, instantiation as UX logic.
++ `typechecker.v`: Function type signatures and safe programs.
++ `summary.v`: Summary contexts and properties.
++ `refute.v`: The refutation algorithm and the inadequacy theorem.
 
-The `logic/` directory contains the formalization of both logics and properties relating them.
-+ `typing.v`: Over-approximate typing rules.
-+ `specs.v`: Under-approximate proof rules.
-+ `sound.v`: Principles relating OX and UX reasoning.
+
+### Additional Content
+
+The `types/` directory contains the formalization of Rust types à la RustBelt.
++ `type.v`: Generic type definition, assertions for type ownership.
++ `lib/`: Directory containing some default type definitions.
++ `rules.v`: Rules of the type system.
