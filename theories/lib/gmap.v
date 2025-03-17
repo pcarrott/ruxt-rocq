@@ -1,4 +1,3 @@
-From stdpp Require Export binders.
 From stdpp Require Export gmap.
 From RUXt.lib Require Export list.
 
