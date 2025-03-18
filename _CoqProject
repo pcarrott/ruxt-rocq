@@ -17,3 +17,4 @@ theories/types/lib/bool.v
 theories/types/lib/unit.v
 theories/types/lib/own.v
 theories/types/rules.v
+theories/types/validity.v

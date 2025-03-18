@@ -32,3 +32,4 @@ The `types/` directory contains the formalization of Rust types à la RustBelt.
 + `type.v`: Generic type definition, assertions for type ownership.
 + `lib/`: Directory containing some default type definitions.
 + `rules.v`: Rules of the type system.
++ `validity.v`: Properties relating OX and UX reasoning.

@@ -44,3 +44,14 @@ Proof.
   eapply frame_addition in Hstep as [[Hstep]|[?[]]]; try done.
   by rewrite (map_empty_union hxs), (map_union_comm hx hxs) in Hstep.
 Qed.
+Lemma call_spec γ f xs e vs P Q ε :
+  γ !! f = Some { (xs) e} →
+  ux_frame_triple γ (Call f (TVals vs)) P Q ε ↔ ux_frame_triple γ (e ⌊ vs [//] xs ⌋) P Q ε.
+Proof.
+  intros HSome. split.
+   + intros Hux ? [?[? Hcall]]%Hux.
+     inversion Hcall; rewrite H4 in HSome; inversion HSome; subst.
+     by eexists.
+   + intros Hux ? [?[]]%Hux.
+     eexists. by split; last eapply F_Call.
+Qed.
