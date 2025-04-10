@@ -4,7 +4,7 @@ From RUXt.model Require Export typechecker.
 
 
 (* Summaries for type spaces *)
-Record summary := mk_summary { ret : val; post : asrt; src : expr }.
+Record summary := mk_summary { post : val → asrt; src : expr }.
 Definition summ_ctx := gmap tid (list summary).
 (* Overloading definitions *)
 Definition summ_cons (ς : summary) o :=
