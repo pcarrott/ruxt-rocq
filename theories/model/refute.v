@@ -55,29 +55,24 @@ Inductive wf_summ_ctx : library → summ_ctx → Prop :=
   wf_summ_ctx Λ Σ'.
 
 (* Semantic interpretation of valid contexts *)
-Definition zip_asrt (Σ : list (tid * summary)) vs :=
-  [∗ zip_with (λ v λP, λP v) vs (post <$> Σ.*2), id].
-Definition forall_sat (Σ : list (tid * summary)) vs :=
-  Forall2 (λ v λQ, sat (λQ v)) vs (post <$> Σ.*2).
+Notation zip_asrt Σ vs := ([∗ zip_with (λ v λP, λP v) vs (post <$> Σ.*2), id]).
 Definition valid_context (Σ : summ_ctx) τs vs P es :=  
   ∃ Σ', Σ' ⊆ flat_summ_ctx Σ ∧
-    τs = Σ'.*1 ∧ es = src <$> Σ'.*2 ∧ P = zip_asrt Σ' vs ∧
-    forall_sat Σ' vs ∧ length vs = length Σ'.
+    τs = Σ'.*1 ∧ es = src <$> Σ'.*2 ∧
+    P = zip_asrt Σ' vs ∧ sat P ∧ length vs = length Σ'.
 (* Soundness *)
 Theorem context_soundness Σ τs vs P es :
   wf_context Σ τs vs P es → valid_context Σ τs vs P es.
 Proof.
   intros Hinput. induction Hinput.
   + exists []. repeat split; try done.
-    - by apply list_subseteq_nil.
-    - by unfold forall_sat.
+    - apply list_subseteq_nil.
+    - by eexists.
   + destruct IHHinput as [Σ' [Hsub [-> [-> [-> [Hsat Hlen]]]]]].
     set (ς := {| post := λQ ; src := e|}). exists ((τ, ς) :: Σ').
     repeat split; try done.
     - apply list_subseteq_cons_iff.
       by split; first apply elem_of_flat.
-    - assert (sat (λQ v ∗ zip_asrt Σ' vs)) as Hsat' by assumption.
-      apply hstar_sat in Hsat' as []. by apply Forall2_cons.
     - solve_length.
 Qed.
 
@@ -153,8 +148,7 @@ Proof.
       apply safe_main_closed in Hsafe'.
       rewrite let_subst; try done; last solve_length.
       eapply (let_spec _ _ _ _ _ _ (zip_asrt (Σ1 ++ [ς]) (vs1 ++ [v]))).
-      * unfold zip_asrt. do 2 rewrite fmap_app.
-        rewrite zip_with_app; last solve_length.
+      * do 2 rewrite fmap_app. rewrite zip_with_app; last solve_length.
         by apply frame_app_spec.
       * by rewrite subst_vals_subst; last solve_length.
 Qed.
