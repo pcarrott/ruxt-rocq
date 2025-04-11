@@ -162,11 +162,10 @@ Proof.
   intros Hsumm [f [τs [Htype [vs [P [es [Hctx [L [Hspec [xs [-> [Hlenx Hdup]]]]]]]]]]]].
   apply context_soundness in Hctx as [Σ' [Hsub [-> [-> [-> [Hsat Hlenv]]]]]].
   apply ux_frame_soundness in Hspec.
-  specialize (reachable_bindings Λ Σ [] Σ' [] xs [] vs τ ε Q (Call f (TVars xs))) as Hbindings.
   assert (length xs = length Σ') as Hlenx' by solve_length.
-  assert (length vs = length Σ') as Hlenv' by solve_length.
-  specialize (Hbindings Hsumm Hsub Hsat Hdup eq_refl Hlenx' eq_refl Hlenv').
-  apply Hbindings. split.
+  apply (reachable_bindings _ _ [] _ [] _ [] _ _ _ _ _
+    Hsumm Hsub Hsat Hdup eq_refl Hlenx' eq_refl Hlenv
+  ); split.
   + by apply safe_call; first solve_length.
   + rewrite subst_call_args; try done; solve_length.
 Qed.
