@@ -27,7 +27,7 @@ Inductive wf_context : summ_ctx → list tid → list val → asrt → list expr
   wf_context Σ [] [] EMP []
 | I_Star Σ τs vs P es τ v λQ e :
   wf_context Σ τs vs P es →
-  mk_summary λQ e ∈ Σ !!! τ → sat (λQ v) →
+  mk_summary λQ e ∈ Σ !!! τ → sat (λQ v ∗ P) →
   wf_context Σ (τ :: τs) (v :: vs) (λQ v ∗ P) (e :: es).
 Definition safe_context Σ τs vs P es := wf_context Σ τs vs P es.
 (* The refutation procedure *)
@@ -37,8 +37,10 @@ Definition try_refute Λ Σ (Σ' : summ_ctx + expr) :=
   | inl Σ' =>
       (* A new summary λQ is learned for τ with witness e *)
       ∃ τ λQ e, Σ' = update (mk_summary λQ e) τ Σ ∧
-      (* Every v that satisfies λQ is a reachable safe value *)
-      ∀ v, sat (λQ v) → derivable_post (safe_context Σ) Λ τ (Ok v) (λQ v) e
+      (* λQ is a satisfiable post for some value v *)
+      ∃ v, sat (λQ v) ∧
+      (* Every v is a reachable safe value (FALSE is vacuously reachable) *)
+      ∀ v, derivable_post (safe_context Σ) Λ τ (Ok v) (λQ v) e
   (* Found witness e for type unsoundness *)
   | inr e =>
       (* Unsuccessful termination is derivable with a satisfiable post *)
@@ -74,7 +76,8 @@ Proof.
     repeat split; try done.
     - apply list_subseteq_cons_iff.
       by split; first apply elem_of_flat.
-    - by apply Forall2_cons.
+    - assert (sat (λQ v ∗ zip_asrt Σ' vs)) as Hsat' by assumption.
+      apply hstar_sat in Hsat' as []. by apply Forall2_cons.
     - solve_length.
 Qed.
 
@@ -85,12 +88,12 @@ Definition reachable_from_program 𝕍 xs vs P Λ τ ε Q e :=
 Notation reachable_from_main := (reachable_from_program ∅ [] [] EMP).
 (* Semantic interpretation of valid summaries *)
 Definition valid_summ_ctx Λ (Σ : summ_ctx) :=
-  ∀ τ ς, ς ∈ Σ !!! τ → ∀ v, sat (post ς v) →
-  reachable_from_main Λ τ (Ok v) (post ς v) (src ς).
+  ∀ τ ς, ς ∈ Σ !!! τ → ∃ v, sat (post ς v) ∧
+  ∀ v, reachable_from_main Λ τ (Ok v) (post ς v) (src ς).
 (* Properties *)
 Lemma reachable_bindings Λ Σ Σ1 Σ2 xs1 xs2 vs1 vs2 τ ε Q e :
   valid_summ_ctx Λ Σ → Σ1 ++ Σ2 ⊆ flat_summ_ctx Σ →
-  forall_sat Σ2 vs2 → NoDup (xs1 ++ xs2) →
+  NoDup (xs1 ++ xs2) →
   length xs1 = length Σ1 → length xs2 = length Σ2 →
   length vs1 = length Σ1 → length vs2 = length Σ2 →
   reachable_from_program
@@ -100,7 +103,7 @@ Lemma reachable_bindings Λ Σ Σ1 Σ2 xs1 xs2 vs1 vs2 τ ε Q e :
     (cons_var_ctx xs1 Σ1.*1) xs1 vs1
     (zip_asrt Σ1 vs1) Λ τ ε Q (bindings xs2 (src <$> Σ2.*2) e).
 Proof.
-  intros Hsumm Hsub Hsat Hdup Hlenx1 Hlenx2 Hlenv1 Hlenv2 Hreach; subst.
+  intros Hsumm Hsub Hdup Hlenx1 Hlenx2 Hlenv1 Hlenv2 Hreach; subst.
   rewrite reverse_var_ctx; last first.
   { by apply NoDup_app in Hdup as []. }
   { by rewrite length_fmap. }
@@ -111,7 +114,7 @@ Proof.
     generalize dependent xs2; generalize dependent xs1;
     generalize dependent vs2; generalize dependent vs1.
   induction Σ2 as [|ς Σ2]; simpl in *;
-    intros vs1 vs2 Hsat Hlenv2 xs1 xs2 Hdup Hlenx2 Σ1 Hsub Hlenx1 Hlenv1 e Hreach.
+    intros vs1 vs2 Hlenv2 xs1 xs2 Hdup Hlenx2 Σ1 Hsub Hlenx1 Hlenv1 e Hreach.
   + apply nil_length_inv in Hlenx2, Hlenv2; subst.
     rewrite 3 (right_id_L _ (++)) in *.
     by unfold bindings.
@@ -130,15 +133,15 @@ Proof.
       as Hlenx1' by by rewrite 2 length_app; simpl; lia.
     assert (length (vs1 ++ [v]) = length (Σ1 ++ [ς]))
       as Hlenv1' by by rewrite 2 length_app; simpl; lia.
-    assert (ς.2 ∈ Σ !!! ς.1) as Hreach'%Hsumm.
+    assert (ς.2 ∈ Σ !!! ς.1) as [_ [_ Hreach']]%Hsumm.
     {
       eapply elem_of_flat, elem_of_subseteq; last done.
       apply elem_of_app; left. apply elem_of_app; right.
       by destruct ς; left.
     }
-    apply Forall2_cons in Hsat as [[Hsafe' Hux']%Hreach' Hsat].
+    specialize (Hreach' v) as [Hsafe' Hux'].
     specialize (IHΣ2
-      _ _ Hsat Hlenv2'
+      _ _ Hlenv2'
       _ _ Hdup Hlenx2'
       _ Hsub Hlenx1' Hlenv1'
       _ Hreach) as [Hsafe Hux].
@@ -160,11 +163,11 @@ Lemma derivable_for_main Λ Σ e τ Q ε :
   reachable_from_main Λ τ ε Q e.
 Proof.
   intros Hsumm [f [τs [Htype [vs [P [es [Hctx [L [Hspec [xs [-> [Hlenx Hdup]]]]]]]]]]]].
-  apply context_soundness in Hctx as [Σ' [Hsub [-> [-> [-> [Hsat Hlenv]]]]]].
+  apply context_soundness in Hctx as [Σ' [Hsub [-> [-> [-> [_ Hlenv]]]]]].
   apply ux_frame_soundness in Hspec.
   assert (length xs = length Σ') as Hlenx' by solve_length.
   apply (reachable_bindings _ _ [] _ [] _ [] _ _ _ _ _
-    Hsumm Hsub Hsat Hdup eq_refl Hlenx' eq_refl Hlenv
+    Hsumm Hsub Hdup eq_refl Hlenx' eq_refl Hlenv
   ); split.
   + by apply safe_call; first solve_length.
   + rewrite subst_call_args; try done; solve_length.
@@ -176,11 +179,11 @@ Proof.
   intros Hsumm. induction Hsumm as [|? ? ? ? ? Hrefute].
   + inversion 1.
   + intros τ' ς' Hin.
-    destruct Hrefute as [τ [λQ [e [-> Hsat]]]].
+    destruct Hrefute as [τ [λQ [e [-> [v [Hsat Hpost]]]]]].
     destruct (decide (τ = τ')) as [<-|].
     - rewrite lookup_total_update in Hin.
       apply elem_of_cons in Hin as [->|]; last by eapply IHHsumm.
-      intros v Hpost%Hsat. by eapply derivable_for_main.
+      exists v. by split; last (intros; eapply derivable_for_main).
     - by rewrite lookup_total_update_ne in Hin; first eapply IHHsumm.
 Qed.
 

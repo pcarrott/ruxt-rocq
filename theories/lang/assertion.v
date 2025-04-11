@@ -89,6 +89,12 @@ Proof.
       first apply map_disjoint_union_l; try done.
     by do 2 eexists.
 Qed.
+Lemma hstar_sat P Q :
+  sat (P ∗ Q) → sat P ∧ sat Q.
+Proof.
+  intros [h [hP [hQ [-> [Hdisj [HP HQ]]]]]].
+  by split; eexists.
+Qed.
 
 (* Iterated star *)
 Lemma hiter_nil {X : Type} (P : X → asrt) h :
