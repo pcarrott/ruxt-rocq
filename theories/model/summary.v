@@ -1,11 +1,54 @@
 From RUXt.lib Require Export gmap.
 From RUXt.lang Require Export assertion.
-From RUXt.model Require Export typechecker.
+From RUXt.model Require Export typechecker logic.
 
 
 (* Summaries for type spaces *)
-Record summary := mk_summary { post : val → asrt; src : expr }.
+Record concrete_summary := mk_summary { post : asrt; src : expr }.
+Definition summary := val → concrete_summary.
+Definition base_summary (kind : base_type) : summary :=
+  λ v, mk_summary (val_post kind v) (Pure (PVal v)).
+(* Summary contexts *)
 Definition summ_ctx := gmap tid (list summary).
+Definition insert_base_summary kind Σ : summ_ctx :=
+  <[TyBase kind := [base_summary kind]]>Σ.
+Definition base_summ_ctx : summ_ctx :=
+  foldr insert_base_summary ∅ [TyInt; TyBool; TyLoc; TyUnit].
+Lemma lookup_total_base kind :
+  base_summ_ctx !!! (TyBase kind) = [base_summary kind].
+Proof.
+  unfold base_summ_ctx.
+  Notation lookup_base l kind := (foldr insert_base_summary ∅ l !!! TyBase kind).
+  destruct (decide (kind = TyInt)) as [->|]; first apply lookup_total_insert.
+  replace (_ _ _ _ !!! _) with (lookup_base [TyBool; TyLoc; TyUnit] kind) by 
+    by symmetry; eapply lookup_total_insert_ne; congruence.
+  destruct (decide (kind = TyBool)) as [->|]; first apply lookup_total_insert.
+  replace (_ _ _ _ !!! _) with (lookup_base [TyLoc; TyUnit] kind) by 
+    by symmetry; eapply lookup_total_insert_ne; congruence.
+  destruct (decide (kind = TyLoc)) as [->|]; first apply lookup_total_insert.
+  replace (_ _ _ _ !!! _) with (lookup_base [TyUnit] kind) by 
+    by symmetry; eapply lookup_total_insert_ne; congruence.
+  destruct (decide (kind = TyUnit)) as [->|]; first apply lookup_total_insert.
+  replace (_ _ _ _ !!! _) with (lookup_base [] kind) by 
+    by symmetry; eapply lookup_total_insert_ne; congruence.
+  by destruct kind.
+Qed.
+Lemma lookup_total_custom n :
+  base_summ_ctx !!! (TyCustom n) = [].
+Proof.
+  unfold base_summ_ctx.
+  Notation lookup_custom l n := (foldr insert_base_summary ∅ l !!! TyCustom n).
+  replace (_ _ _ _ !!! _) with (lookup_custom [TyBool; TyLoc; TyUnit] n) by
+    by symmetry; eapply lookup_total_insert_ne.
+  replace (_ _ _ _ !!! _) with (lookup_custom [TyLoc; TyUnit] n) by
+    by symmetry; eapply lookup_total_insert_ne.
+  replace (_ _ _ _ !!! _) with (lookup_custom [TyUnit] n) by
+    by symmetry; eapply lookup_total_insert_ne.
+  replace (_ _ _ _ !!! _) with (lookup_custom [] n) by
+    by symmetry; eapply lookup_total_insert_ne.
+  done.
+Qed.
+
 (* Overloading definitions *)
 Definition summ_cons (ς : summary) o :=
   match o with None => Some [ς] | Some l => Some (ς :: l) end.

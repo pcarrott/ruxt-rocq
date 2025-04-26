@@ -2,22 +2,41 @@ From RUXt.lib Require Import gmap.
 From RUXt.lang Require Export lang.
 
 
-(* Identifiers for named types *)
-Definition tid := string.
-(* Base types *)
-Definition val_tid (v : val) : tid :=
+(* Base types for values *)
+Inductive base_type := TyInt | TyBool | TyLoc | TyUnit.
+Definition val_type (v : val) : base_type :=
   match v with
-  | VInt _ => "int"
-  | VBool _ => "bool"
-  | VLoc _ => "loc"
-  | VUnit => "unit"
+  | VInt _ => TyInt | VBool _ => TyBool
+  | VLoc _ => TyLoc | VUnit   => TyUnit
   end.
+
+(* Identifiers for named types *)
+Inductive tid := TyBase (kind : base_type) | TyCustom (name : string).
+Global Instance base_type_eq_dec : EqDecision base_type.
+Proof. solve_decision. Defined.
+Global Instance tid_eq_dec : EqDecision tid.
+Proof. solve_decision. Defined.
+Global Instance exit_countable : Countable base_type.
+Proof.
+  refine (inj_countable' (λ ε, match ε with
+  | TyInt => (inl (inl ())) | TyBool => (inl (inr ()))
+  | TyLoc => (inr (inl ())) | TyUnit => (inr (inr ()))
+  end) (λ s, match s with
+  | (inl (inl ())) => TyInt | (inl (inr ())) => TyBool
+  | (inr (inl ())) => TyLoc | (inr (inr ())) => TyUnit
+  end) _); by intros [].
+Qed.
+Global Instance term_countable : Countable tid.
+Proof.
+  refine (inj_countable' (λ t, match t with TyBase k => inl k | TyCustom n => inr n end)
+  (λ s, match s with inl k => TyBase k | inr n => TyCustom n end) _); by intros [].
+Qed.
 
 (* Function type signatures *)
 Record fun_sign := mk_fun_sign { ty_in : list tid; ty_out : tid }.
 Notation "{ τs ↣ₛ τ }" := (mk_fun_sign τs τ).
 (* Signature contexts *)
-Definition sign_ctx := gmap tid fun_sign.
+Definition sign_ctx := gmap string fun_sign.
 
 (* Typed variable contexts *)
 Definition var_ctx := gmap string tid.
@@ -62,7 +81,7 @@ Qed.
 Definition check_term (𝕍 : var_ctx) t τ : bool :=
   match t with
   | TVar x => bool_decide (𝕍 !! x = Some τ)
-  | TVal v => bool_decide (val_tid v = τ)
+  | TVal v => bool_decide (TyBase (val_type v) = τ)
   end.
 Fixpoint check_terms (𝕍 : var_ctx) ts τs : bool :=
   match ts, τs with
@@ -133,6 +152,7 @@ Fixpoint safe_program 𝕍 (Δ : sign_ctx) e : option tid :=
       | Some { τs ↣ₛ τ } => if check_terms 𝕍 ts τs then Some τ else None
       | None => None
       end
+  | Pure (PVal v) => Some (TyBase (val_type v))
   | _ => None
   end.
 (* A [main] program is a safe program with no free variables *)
@@ -179,6 +199,7 @@ Lemma safe_program_closed 𝕍 Δ e τ :
 Proof.
   generalize dependent τ. generalize dependent 𝕍.
   induction e; try done; intros 𝕍 τ Hmain.
+  + by destruct p; first destruct t. 
   + unfold safe_main in Hmain; simpl in Hmain.
     case_match eqn:Hopt; last done.
     specialize (IHe1 _ _ Hopt).

@@ -1,5 +1,6 @@
 From RUXt.lib Require Import gmap.
 From RUXt.lang Require Import semantics assertion.
+From RUXt.model Require Import typechecker.
 
 (* UX semantics *)
 Definition ux_triple eval (γ : impl_ctx) (e : expr) (P Q : asrt) (ε : exit) : Prop :=
@@ -24,7 +25,27 @@ Proof.
   by intros ?%ux_frame_soundness%ux_triple_preservation.
 Qed.
 
+(* Values and satisfiable postconditions *)
+Definition sat_post (λQ : val → asrt) := ∃ v, sat (λQ v).
+Definition val_post (kind : base_type) (v : val) : asrt :=
+  match kind with
+  | TyInt => ⌞ ∃ z, v = VInt z ⌟ | TyBool => ⌞ ∃ b, v = VBool b ⌟
+  | TyLoc => ⌞ ∃ l, v = VLoc l ⌟ | TyUnit => ⌞      v = VUnit   ⌟
+  end.
+Lemma val_post_sat kind : sat_post (val_post kind).
+Proof.
+  by destruct kind; do 2 eexists; last done; (split; first done); eexists.
+  Unshelve. exact 0%Z. exact true. exact (1%positive, 0).
+Qed.
+
 (* UX properties *)
+Lemma pure_val_spec γ v :
+  ux_frame_triple γ (Pure (PVal v)) EMP (val_post (val_type v) v) (Ok v).
+Proof.
+  intros ? Hval. eexists. split; first done.
+  assert (h' = ∅) as ->; last by eapply F_Pure.
+  by destruct v; destruct Hval.
+Qed.
 Lemma let_spec γ x e1 e2 P Q R v ε :
   ux_frame_triple γ e1 P R (Ok v) → ux_frame_triple γ (e2⌊v//x⌋) R Q ε →
   ux_frame_triple γ (Let x e1 e2) P Q ε.
