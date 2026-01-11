@@ -4,8 +4,8 @@ To compile this Coq development, simply run `make`.
 
 ### Prerequisites
 This development is known to compile with
-+ Coq 8.20.1
-+ Coq-std++ 1.11.0
++ Rocq 9.0.1
++ Rocq-std++ 1.12.0
 
 
 ### Directory Structure

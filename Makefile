@@ -22,7 +22,7 @@ clean: Makefile.coq
 
 # Create Coq Makefile.
 Makefile.coq: _CoqProject Makefile
-	"$(COQBIN)coq_makefile" -f _CoqProject -o Makefile.coq $(EXTRA_COQFILES)
+	rocq makefile -f _CoqProject -o Makefile.coq $(EXTRA_COQFILES)
 
 # Some files that do *not* need to be forwarded to Makefile.coq.
 # ("::" lets Makefile.local overwrite this.)
