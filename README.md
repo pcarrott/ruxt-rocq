@@ -1,4 +1,8 @@
-# RUXtBelt: The Semantic Model of RUXt
+# RUXt: Rocq Formalisation
+
+> **⚠️ DEPRECATED**
+>
+> This repository is no longer actively maintained. For the most recent formalisation of RUXt, its Lean counterpart can be found [here](https://github.com/pcarrott/ruxt-lean).
 
 To compile this Coq development, simply run `make`.
 
